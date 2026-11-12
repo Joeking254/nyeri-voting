@@ -37,11 +37,16 @@ export async function requireAdminApi(request: Request, elevated = false) {
   return { session };
 }
 
-export function setAdminCookie(response: NextResponse, token: string) {
+export function setAdminCookie(response: NextResponse, token: string, isHttps?: boolean) {
+  const secure =
+    isHttps !== undefined
+      ? isHttps
+      : Boolean(process.env.NEXT_PUBLIC_APP_URL?.startsWith("https://"));
+
   response.cookies.set(ADMIN_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
+    secure,
+    sameSite: "lax",
     path: "/",
     maxAge: 60 * 60 * 8,
   });

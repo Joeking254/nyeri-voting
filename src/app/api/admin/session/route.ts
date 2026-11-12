@@ -57,15 +57,27 @@ export async function POST(request: Request) {
     console.error("Admin token creation failed", error);
     return NextResponse.json({ error: "Unable to create an admin session." }, { status: 503 });
   }
+  const isHttps =
+    request.url.startsWith("https://") ||
+    request.headers.get("x-forwarded-proto") === "https";
   const response = NextResponse.json({ email: admin.email, role: admin.role });
-  setAdminCookie(response, token);
+  setAdminCookie(response, token, isHttps);
   return response;
 }
 
 export async function DELETE(request: Request) {
   if (!isSameOriginRequest(request)) return NextResponse.json({ error: "Cross-origin request rejected" }, { status: 403 });
+  const isHttps =
+    request.url.startsWith("https://") ||
+    request.headers.get("x-forwarded-proto") === "https";
   const response = NextResponse.json({ ok: true });
-  response.cookies.set(ADMIN_COOKIE, "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "strict", path: "/", maxAge: 0 });
+  response.cookies.set(ADMIN_COOKIE, "", {
+    httpOnly: true,
+    secure: isHttps,
+    sameSite: "lax",
+    path: "/",
+    maxAge: 0,
+  });
   return response;
 }
 

@@ -24,8 +24,8 @@ export default function AdminLoginPage() {
       const result = await response.json().catch(() => null) as { error?: string } | null;
       if (!response.ok) throw new Error(result?.error || "Unable to sign in. Check server and database status.");
       const next = new URLSearchParams(window.location.search).get("next");
-      router.replace(next?.startsWith("/admin") && !next.startsWith("/admin/login") ? next : "/admin");
-      router.refresh();
+      const destination = next?.startsWith("/admin") && !next.startsWith("/admin/login") ? next : "/admin";
+      window.location.href = destination;
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Unable to sign in.");
     } finally {
