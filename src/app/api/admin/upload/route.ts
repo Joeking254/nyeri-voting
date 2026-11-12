@@ -22,9 +22,6 @@ export async function POST(request: Request) {
   const apiKey = process.env.CLOUDINARY_API_KEY;
   const apiSecret = process.env.CLOUDINARY_API_SECRET;
   const cloudinaryConfigured = Boolean(cloudName && apiKey && apiSecret);
-  if (!cloudinaryConfigured && process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Production image storage is not configured." }, { status: 503 });
-  }
 
   const formData = await request.formData().catch(() => null);
   const file = formData?.get("file");

@@ -276,28 +276,28 @@ export function ManageNominees({
       )}
 
       {/* Nominees Table */}
-      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[780px] text-left text-sm">
+          <table className="w-full text-left text-sm">
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-3">Nominee</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3 text-right">Votes</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Actions</th>
+                <th className="px-3.5 py-3">Nominee</th>
+                <th className="px-3.5 py-3">Category</th>
+                <th className="px-3 py-3 text-center">Votes</th>
+                <th className="px-3 py-3 text-center">Status</th>
+                <th className="px-3.5 py-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {nominees.map((nominee) => (
                 <tr key={nominee.id} className="hover:bg-slate-50/80 transition-colors">
-                  <td className="px-4 py-3">
+                  <td className="px-3.5 py-3">
                     <div className="flex items-center gap-3">
                       {nominee.photoUrl ? (
                         <img
                           src={nominee.photoUrl}
                           alt=""
-                          className="size-11 rounded-lg object-cover"
+                          className="size-11 shrink-0 rounded-lg object-cover"
                           style={{
                             objectPosition:
                               nominee.photoPosition === "top"
@@ -308,7 +308,7 @@ export function ManageNominees({
                           }}
                         />
                       ) : (
-                        <span className="grid size-11 place-items-center rounded-lg bg-slate-100 font-bold text-slate-500">
+                        <span className="grid size-11 shrink-0 place-items-center rounded-lg bg-slate-100 font-bold text-slate-500">
                           {nominee.fullName.slice(0, 1)}
                         </span>
                       )}
@@ -320,13 +320,13 @@ export function ManageNominees({
                       </div>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-slate-600">{nominee.category.name}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  <td className="px-3.5 py-3 text-xs text-slate-600 font-medium">{nominee.category.name}</td>
+                  <td className="px-3 py-3 text-center tabular-nums">
                     <span className="inline-block rounded-md bg-slate-100 px-2 py-0.5 font-bold text-slate-900">
                       {BigInt(nominee.totalVotes).toLocaleString()}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3 text-center">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                         nominee.isActive ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"
@@ -336,9 +336,9 @@ export function ManageNominees({
                       {nominee.isActive ? "Active" : "Suspended"}
                     </span>
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3.5 py-3">
                     <div className="flex items-center justify-end gap-1.5">
-                      {/* Add / Deduct Votes Button */}
+                      {/* 1. Add / Deduct Votes */}
                       <button
                         type="button"
                         onClick={() => openAdjust(nominee)}
@@ -349,38 +349,38 @@ export function ManageNominees({
                         <span>+/- Votes</span>
                       </button>
 
-                      {/* Edit Nominee */}
+                      {/* 2. Edit Profile */}
                       <button
                         type="button"
                         onClick={() => openEdit(nominee)}
-                        title="Edit profile"
+                        title="Edit profile & photo"
                         className="grid size-8 place-items-center rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors"
                       >
                         <Pencil className="size-3.5" />
                       </button>
 
-                      {/* Suspend / Activate Toggle */}
+                      {/* 3. Delete Nominee (Prominent Red Button) */}
+                      <button
+                        type="button"
+                        onClick={() => openDelete(nominee)}
+                        title="Delete nominee permanently"
+                        className="grid size-8 place-items-center rounded-lg border border-rose-300 bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+
+                      {/* 4. Suspend / Activate Toggle */}
                       <button
                         type="button"
                         onClick={() => void toggleActive(nominee)}
                         title={nominee.isActive ? "Suspend nominee (hide from public)" : "Activate nominee"}
                         className={`grid size-8 place-items-center rounded-lg border transition-colors ${
                           nominee.isActive
-                            ? "border-slate-200 text-slate-600 hover:bg-slate-100"
+                            ? "border-slate-200 text-slate-500 hover:bg-slate-100"
                             : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                         }`}
                       >
                         {nominee.isActive ? <UserX className="size-3.5" /> : <UserCheck className="size-3.5" />}
-                      </button>
-
-                      {/* Delete Nominee (Permanent) */}
-                      <button
-                        type="button"
-                        onClick={() => openDelete(nominee)}
-                        title="Delete nominee permanently"
-                        className="grid size-8 place-items-center rounded-lg border border-rose-200 text-rose-600 hover:bg-rose-50 transition-colors"
-                      >
-                        <Trash2 className="size-3.5" />
                       </button>
                     </div>
                   </td>
@@ -764,20 +764,40 @@ export function ManageNominees({
                   {error}
                 </p>
               )}
-              <div className="flex justify-end gap-2 border-t border-slate-200 pt-4 sm:col-span-2">
-                <button
-                  type="button"
-                  className="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  onClick={() => setModalOpen(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  disabled={busy || uploading}
-                  className="min-h-10 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
-                >
-                  {busy ? "Saving..." : editingId ? "Save changes" : "Add nominee"}
-                </button>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-4 sm:col-span-2">
+                {editingId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nomineeToDelete = nominees.find((n) => n.id === editingId);
+                      if (nomineeToDelete) {
+                        setModalOpen(false);
+                        openDelete(nomineeToDelete);
+                      }
+                    }}
+                    className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-3.5 text-xs font-bold text-rose-700 hover:bg-rose-100 hover:text-rose-900 transition-colors"
+                  >
+                    <Trash2 className="size-4 text-rose-600" />
+                    <span>Delete Nominee</span>
+                  </button>
+                ) : (
+                  <div />
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="min-h-10 rounded-lg border border-slate-300 px-4 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    onClick={() => setModalOpen(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    disabled={busy || uploading}
+                    className="min-h-10 rounded-lg bg-slate-900 px-4 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                  >
+                    {busy ? "Saving..." : "Save changes"}
+                  </button>
+                </div>
               </div>
             </form>
           </section>
