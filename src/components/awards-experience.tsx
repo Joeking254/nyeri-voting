@@ -625,7 +625,6 @@ export function AwardsExperience({
                 <li><Link href="/privacy" className="hover:text-sky-700 dark:hover:text-white">Privacy Policy</Link></li>
                 <li><Link href="/terms" className="hover:text-sky-700 dark:hover:text-white">Terms of Participation</Link></li>
                 <li><Link href="/about" className="hover:text-sky-700 dark:hover:text-white">About the Initiative</Link></li>
-                <li><Link href="/admin/login" className="hover:text-sky-700 dark:hover:text-white">Auditor & Admin Portal</Link></li>
               </ul>
             </div>
           </div>
