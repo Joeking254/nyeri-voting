@@ -74,9 +74,14 @@ export function isAuthorizedPayHeroCallback(request: Request): boolean {
     request.headers.get("x-callback-token") ||
     request.headers.get("x-payhero-token");
 
-  // In non-production or if no token was configured in .env, allow
-  if (!expectedToken || process.env.NODE_ENV !== "production") {
-    if (!providedToken) return true;
+  // If no token was configured, allow callback
+  if (!expectedToken) {
+    return true;
+  }
+
+  // In non-production, allow callback testing if token wasn't provided
+  if (process.env.NODE_ENV !== "production" && !providedToken) {
+    return true;
   }
 
   if (!providedToken) return false;
