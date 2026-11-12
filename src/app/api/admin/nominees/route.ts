@@ -94,8 +94,44 @@ export async function PATCH(request: Request) {
 export async function DELETE(request: Request) {
   const auth = await requireAdminApi(request);
   if (auth.response) return auth.response;
-  const id = new URL(request.url).searchParams.get("id");
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
   if (!id) return NextResponse.json({ error: "Nominee ID is required." }, { status: 400 });
-  const nominee = await prisma.nominee.update({ where: { id }, data: { isActive: false } }).catch(() => null);
-  return nominee ? NextResponse.json({ ok: true }) : NextResponse.json({ error: "Nominee not found." }, { status: 404 });
+
+  const permanent = url.searchParams.get("permanent") === "true";
+
+  try {
+    if (permanent) {
+      if (auth.session.role !== "super_admin") {
+        return NextResponse.json({ error: "Super admin access required to delete nominees permanently." }, { status: 403 });
+      }
+
+      const nominee = await prisma.nominee.findUnique({
+        where: { id },
+        select: { id: true, categoryId: true, totalVotes: true },
+      });
+      if (!nominee) return NextResponse.json({ error: "Nominee not found." }, { status: 404 });
+
+      await prisma.$transaction(async (tx) => {
+        if (nominee.totalVotes > BigInt(0)) {
+          await tx.category.update({
+            where: { id: nominee.categoryId },
+            data: { totalVotes: { decrement: nominee.totalVotes } },
+          });
+        }
+        await tx.voteAdjustment.deleteMany({ where: { nomineeId: id } });
+        await tx.awardResult.deleteMany({ where: { nomineeId: id } });
+        await tx.voteTransaction.deleteMany({ where: { nomineeId: id } });
+        await tx.nominee.delete({ where: { id } });
+      });
+
+      return NextResponse.json({ ok: true, deleted: true });
+    } else {
+      const nominee = await prisma.nominee.update({ where: { id }, data: { isActive: false } });
+      return NextResponse.json({ ok: true, suspended: true });
+    }
+  } catch (err: any) {
+    console.error("Nominee delete error:", err);
+    return NextResponse.json({ error: err.message || "Could not delete nominee." }, { status: 500 });
+  }
 }
