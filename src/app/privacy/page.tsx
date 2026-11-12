@@ -1,0 +1,5 @@
+import { PublicPageShell } from "@/components/public-page-shell";
+
+export default function PrivacyPage() {
+  return <PublicPageShell eyebrow="Your information" title="Privacy policy"><div className="space-y-4 text-sm leading-7 text-slate-700"><p>The voting platform collects the phone number required to initiate M-Pesa payments and stores transaction references, payment status, receipt numbers, and vote quantities for verification, support, fraud prevention, and financial reconciliation.</p><p>Payment credentials and M-Pesa PINs are entered only on Safaricom&apos;s payment interface. The awards platform does not request or store your PIN.</p><p>Transaction records are restricted to authorized administrators and are retained for audit and legal requirements. Public pages do not expose phone numbers or confidential payment details.</p><p>Contact the awards organizers through the official contact channels published for the event to request help with a transaction or ask about your information.</p></div></PublicPageShell>;
+}

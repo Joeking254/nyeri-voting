@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum VoteStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum AdminRole {
+  super_admin
+  moderator
+}
+
+enum AnnouncementKind {
+  general
+  voting_open
+  closing_soon
+  voting_closed
+}
+
+enum SponsorTier {
+  title
+  gold
+  silver
+  supporting
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  imageUrl    String?    @map("image_url")
+  orderIndex  Int        @default(0) @map("order_index")
+  totalVotes  BigInt     @default(0) @map("total_votes")
+  isActive    Boolean    @default(true) @map("is_active")
+  votingOpen  Boolean    @default(true) @map("voting_open")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  nominees    Nominee[]
+  votes       VoteTransaction[]
+  adjustments VoteAdjustment[]
+  results     AwardResult[]
+
+  @@map("categories")
+}
+
+model Nominee {
+  id            String            @id @default(cuid())
+  slug          String            @unique
+  categoryId    String            @map("category_id")
+  fullName      String            @map("full_name")
+  stageName     String?           @map("stage_name")
+  bio           String?
+  location      String?
+  photoUrl      String?           @map("photo_url")
+  photoPosition String            @default("center") @map("photo_position")
+  socialHandles Json              @default("{}") @map("social_handles")
+  totalVotes    BigInt            @default(0) @map("total_votes")
+  isActive      Boolean           @default(true) @map("is_active")
+  isApproved    Boolean           @default(true) @map("is_approved")
+  isFeatured    Boolean           @default(false) @map("is_featured")
+  isVerified    Boolean           @default(false) @map("is_verified")
+  category      Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  votes         VoteTransaction[]
+  adjustments   VoteAdjustment[]
+  results       AwardResult[]
+
+  @@index([categoryId])
+  @@index([categoryId, isActive])
+  @@index([isActive, isApproved, isFeatured])
+  @@map("nominees")
+}
+
+model VoteTransaction {
+  id                  String     @id @default(cuid())
+  transactionId       String?    @unique @map("checkout_request_id")
+  merchantRequestId   String?    @map("merchant_request_id")
+  phoneNumber         String     @map("phone_number")
+  nomineeId           String     @map("nominee_id")
+  categoryId          String     @map("category_id")
+  numberOfVotes       Int        @map("number_of_votes")
+  amountPaid          Int        @map("amount_paid")
+  status              VoteStatus @default(PENDING)
+  mpesaReceiptNumber  String?    @unique @map("mpesa_receipt_number")
+  createdAt           DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt           DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  nominee             Nominee    @relation(fields: [nomineeId], references: [id], onDelete: Restrict)
+  category            Category   @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@index([status])
+  @@index([status, createdAt])
+  @@index([nomineeId, status])
+  @@map("vote_transactions")
+}
+
+model AdminUser {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  role         AdminRole @default(moderator)
+  adjustments  VoteAdjustment[]
+  auditLogs    AuditLog[]
+  articles     NewsArticle[]
+
+  @@map("admin_users")
+}
+
+model EventSettings {
+  id         String   @id @default("global")
+  votingOpen Boolean  @default(true) @map("voting_open")
+  votePrice  Int      @default(10) @map("vote_price")
+  unlimitedVotes Boolean @default(true) @map("unlimited_votes")
+  votingStartsAt DateTime? @map("voting_starts_at") @db.DateTime(3)
+  votingEndsAt DateTime? @map("voting_ends_at") @db.DateTime(3)
+  publicVoteCounts Boolean @default(true) @map("public_vote_counts")
+  publicLeaderboard Boolean @default(true) @map("public_leaderboard")
+  leaderboardAfterClose Boolean @default(false) @map("leaderboard_after_close")
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.DateTime(3)
+
+  @@map("event_settings")
+}
+
+model Announcement {
+  id          String            @id @default(cuid())
+  title       String            @db.VarChar(191)
+  message     String            @db.Text
+  kind        AnnouncementKind  @default(general)
+  isPublished Boolean           @default(false) @map("is_published")
+  startsAt    DateTime?         @map("starts_at") @db.DateTime(3)
+  endsAt      DateTime?         @map("ends_at") @db.DateTime(3)
+  createdAt   DateTime          @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([isPublished, startsAt, endsAt])
+  @@map("announcements")
+}
+
+model Sponsor {
+  id          String      @id @default(cuid())
+  name        String      @db.VarChar(191)
+  tier        SponsorTier @default(supporting)
+  logoUrl     String      @map("logo_url") @db.VarChar(1000)
+  description String?     @db.Text
+  websiteUrl  String?     @map("website_url") @db.VarChar(1000)
+  orderIndex  Int         @default(0) @map("order_index")
+  isActive    Boolean     @default(true) @map("is_active")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.DateTime(3)
+
+  @@index([isActive, tier, orderIndex])
+  @@map("sponsors")
+}
+
+model NewsArticle {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  title       String     @db.VarChar(191)
+  excerpt     String?    @db.Text
+  body        String     @db.LongText
+  imageUrl    String?    @map("image_url") @db.VarChar(1000)
+  isPublished Boolean    @default(false) @map("is_published")
+  publishedAt DateTime?  @map("published_at") @db.DateTime(3)
+  authorId    String?    @map("author_id")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.DateTime(3)
+  updatedAt   DateTime   @updatedAt @map("updated_at") @db.DateTime(3)
+  author      AdminUser? @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([isPublished, publishedAt])
+  @@map("news_articles")
+}
+
+model AwardResult {
+  id             String    @id @default(cuid())
+  categoryId     String    @map("category_id")
+  nomineeId      String    @map("nominee_id")
+  awardYear      Int       @default(2026) @map("award_year")
+  isPublished    Boolean   @default(false) @map("is_published")
+  publishedAt    DateTime? @map("published_at") @db.DateTime(3)
+  certificateUrl String?   @map("certificate_url") @db.VarChar(1000)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  category       Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  nominee        Nominee   @relation(fields: [nomineeId], references: [id], onDelete: Restrict)
+
+  @@unique([categoryId, awardYear])
+  @@index([isPublished, awardYear])
+  @@map("award_results")
+}
+
+model AuditLog {
+  id          String    @id @default(cuid())
+  adminUserId String?   @map("admin_user_id")
+  action      String    @db.VarChar(100)
+  entityType  String    @map("entity_type") @db.VarChar(100)
+  entityId    String?   @map("entity_id") @db.VarChar(191)
+  details     Json?
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  adminUser   AdminUser? @relation(fields: [adminUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([adminUserId, createdAt])
+  @@map("audit_logs")
+}
+
+model VoteAdjustment {
+  id          String    @id @default(cuid())
+  nomineeId   String    @map("nominee_id")
+  categoryId  String    @map("category_id")
+  adminUserId String    @map("admin_user_id")
+  delta       Int
+  reason      String
+  createdAt   DateTime  @default(now()) @map("created_at") @db.DateTime(3)
+  nominee     Nominee   @relation(fields: [nomineeId], references: [id], onDelete: Restrict)
+  category    Category  @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  adminUser   AdminUser @relation(fields: [adminUserId], references: [id], onDelete: Restrict)
+
+  @@index([nomineeId, createdAt])
+  @@map("vote_adjustments")
+}
