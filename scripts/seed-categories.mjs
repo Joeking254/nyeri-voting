@@ -34,6 +34,75 @@ try {
     created += 1;
   }
   await prisma.eventSettings.upsert({ where: { id: "global" }, create: { id: "global" }, update: {} });
+
+  // Ensure default nominees exist
+  const initialNominees = [
+    {
+      slug: "skits-ke",
+      fullName: "STEVE",
+      stageName: "SKITS KE",
+      bio: "Standout comedy and short-form storytelling in Nyeri.",
+      photoUrl: "/uploads/6b320cda-a0a2-4cf3-88b1-8855d9f38512.png",
+      photoPosition: "center",
+      totalVotes: 0n,
+      categoryName: "Best Content Creator",
+    },
+    {
+      slug: "mambake",
+      fullName: "Joe ke",
+      stageName: "Mambake",
+      bio: "Through lenses he captures the vibes.",
+      photoUrl: "/uploads/df09afde-c847-42d3-aaf1-9f6019859242.jpg",
+      photoPosition: "top",
+      totalVotes: 300n,
+      categoryName: "Best Videographer",
+    },
+    {
+      slug: "dragon",
+      fullName: "Stano",
+      stageName: "Dragon",
+      bio: "Life story and vlogs.",
+      photoUrl: "/uploads/b2cf27d6-9664-4448-8f8f-027e7b5d661f.jpg",
+      photoPosition: "center",
+      totalVotes: 0n,
+      categoryName: "Best Content Creator",
+    },
+  ];
+
+  for (const n of initialNominees) {
+    const existingNominee = await prisma.nominee.findUnique({ where: { slug: n.slug } });
+    if (!existingNominee) {
+      let cat = await prisma.category.findFirst({
+        where: {
+          OR: [
+            { name: { contains: n.categoryName.replace(/^Best\s+/, "") } },
+            { name: n.categoryName },
+          ],
+        },
+      });
+      if (!cat) {
+        cat = await prisma.category.findFirst();
+      }
+      if (cat) {
+        await prisma.nominee.create({
+          data: {
+            slug: n.slug,
+            fullName: n.fullName,
+            stageName: n.stageName,
+            bio: n.bio,
+            photoUrl: n.photoUrl,
+            photoPosition: n.photoPosition,
+            totalVotes: n.totalVotes,
+            isActive: true,
+            isApproved: true,
+            categoryId: cat.id,
+          },
+        });
+        console.log(`Seeded nominee ${n.fullName} (${n.stageName})`);
+      }
+    }
+  }
+
   console.log(`Created ${created} missing suggested categories; existing categories and nominees were preserved.`);
 } catch (error) {
   console.error(error instanceof Error ? error.message : "Category seeding failed.");
