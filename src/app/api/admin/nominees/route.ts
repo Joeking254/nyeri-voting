@@ -6,16 +6,17 @@ import { createNomineeSlug } from "@/lib/slug";
 
 export const runtime = "nodejs";
 const socialSchema = z.record(z.string().max(300));
-const photoPositionSchema = z.enum(["center", "top", "bottom"]);
+const photoPositionSchema = z.enum(["center", "top", "bottom", "fit"]);
 const photoUrlSchema = z.string().trim().max(1000).refine((value) => {
   if (!value) return true;
-  if (/^\/uploads\/[0-9a-f-]{36}\.(?:jpg|png|webp)$/.test(value)) return true;
+  if (value.startsWith("/uploads/") || value.startsWith("/")) return true;
   try {
-    return new URL(value).protocol === "https:";
+    const url = new URL(value);
+    return url.protocol === "https:" || url.protocol === "http:";
   } catch {
     return false;
   }
-}, "Use a valid HTTPS image URL or an uploaded nominee image.");
+}, "Use a valid image URL or an uploaded nominee image.");
 const nomineeSchema = z.object({
   fullName: z.string().trim().min(2).max(120),
   stageName: z.string().trim().max(120).optional().default(""),
