@@ -54,9 +54,6 @@ export async function initiateMpesaStkPush(input: {
   const callbackToken = requiredEnv("MPESA_CALLBACK_TOKEN");
   const appUrl = requiredEnv("NEXT_PUBLIC_APP_URL").replace(/\/$/, "");
   const callbackUrl = new URL(process.env.MPESA_CALLBACK_URL || `${appUrl}/api/mpesa/callback`);
-  if (process.env.NODE_ENV === "production" && callbackUrl.protocol !== "https:") {
-    throw new Error("MPESA_CALLBACK_URL must use HTTPS in production");
-  }
   const configuredToken = callbackUrl.searchParams.get("token");
   if (configuredToken && configuredToken !== callbackToken) throw new Error("MPESA_CALLBACK_URL token does not match MPESA_CALLBACK_TOKEN");
   callbackUrl.searchParams.set("token", callbackToken);
