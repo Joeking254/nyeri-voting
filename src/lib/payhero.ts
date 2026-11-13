@@ -48,10 +48,15 @@ export function getPayHeroChannelId(): number {
 }
 
 export function getPayHeroCallbackUrl(): string {
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, "");
-  const callbackUrl = new URL(
-    process.env.PAYHERO_CALLBACK_URL || `${appUrl}/api/payhero/callback`
-  );
+  let rawUrl = (process.env.PAYHERO_CALLBACK_URL || "").trim();
+  if (!rawUrl) {
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://13.62.100.156").replace(/\/$/, "");
+    rawUrl = `${appUrl}/api/payhero/callback`;
+  }
+  // Auto-correct stale EC2 public IP if present
+  rawUrl = rawUrl.replace("13.61.11.252", "13.62.100.156");
+
+  const callbackUrl = new URL(rawUrl);
   const token =
     process.env.PAYHERO_CALLBACK_TOKEN ||
     process.env.MPESA_CALLBACK_TOKEN ||

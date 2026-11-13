@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build",
+    "build": "node scripts/update-env.mjs && prisma generate && next build",
+    "env:update": "node scripts/update-env.mjs",
     "start": "next start",
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate",
