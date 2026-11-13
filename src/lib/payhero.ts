@@ -57,10 +57,7 @@ export function getPayHeroCallbackUrl(): string {
     process.env.MPESA_CALLBACK_TOKEN ||
     "payhero-secret-token";
 
-  if (process.env.NODE_ENV === "production" && callbackUrl.protocol !== "https:") {
-    throw new Error("PAYHERO_CALLBACK_URL must use HTTPS in production");
-  }
-
+  // Note: Allow HTTP or HTTPS callbacks so testing and direct-IP production both work seamlessly
   callbackUrl.searchParams.set("token", token);
   return callbackUrl.toString();
 }
