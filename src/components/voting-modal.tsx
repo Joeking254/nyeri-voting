@@ -56,6 +56,10 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
   const [emailTouched, setEmailTouched] = useState(false);
   const [cardBusy, setCardBusy] = useState(false);
   const [cardError, setCardError] = useState("");
+  const [cardSuccess, setCardSuccess] = useState<{
+    numberOfVotes: number;
+    receiptNumber: string;
+  } | null>(null);
 
   const mpesaAmount = mpesaQuantity * votePrice;
   const cardAmountUsd = Math.max(4, Number((cardQuantity * USD_PER_VOTE).toFixed(2)));
@@ -67,6 +71,16 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
 
   const isBusy = mpesaState.status === "sending" || mpesaState.status === "polling" || cardBusy;
   const displayName = nominee.stageName || nominee.fullName;
+
+  // Preload Paystack Inline JS for instant on-site card entry
+  useEffect(() => {
+    if (typeof window !== "undefined" && !(window as unknown as { PaystackPop?: unknown }).PaystackPop) {
+      const script = document.createElement("script");
+      script.src = "https://js.paystack.co/v1/inline.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, []);
 
   // Lock body scroll while modal is active
   useEffect(() => {
@@ -90,10 +104,10 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
 
   // Refresh server-rendered counts on successful vote
   useEffect(() => {
-    if (mpesaState.status === "success") {
+    if (mpesaState.status === "success" || cardSuccess) {
       router.refresh();
     }
-  }, [mpesaState.status, router]);
+  }, [mpesaState.status, cardSuccess, router]);
 
   function voteAgain() {
     resetMpesa();
@@ -106,6 +120,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
     setEmail("");
     setEmailTouched(false);
     setCardError("");
+    setCardSuccess(null);
   }
 
   function handleMpesaSubmit(event: React.FormEvent) {
@@ -141,17 +156,87 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
           numberOfVotes: cardQuantity,
         }),
       });
-      const data = (await response.json()) as { authorizationUrl?: string; error?: string };
+
+      const data = (await response.json()) as {
+        authorizationUrl?: string;
+        accessCode?: string;
+        reference?: string;
+        amountSubunit?: number;
+        currency?: string;
+        publicKey?: string;
+        error?: string;
+      };
+
       if (!response.ok || !data.authorizationUrl) {
         throw new Error(data.error || "Could not initialize card checkout. Try again.");
       }
-      // Redirect to Paystack secure checkout
-      window.location.href = data.authorizationUrl;
+
+      // Check if Paystack Inline JS is ready for On-Site card input
+      const paystackPop = (window as unknown as { PaystackPop?: { setup: (opts: unknown) => { openIframe: () => void } } }).PaystackPop;
+
+      if (paystackPop && data.publicKey && data.reference && data.amountSubunit) {
+        // Launch Paystack Card Modal directly ON-SITE!
+        const handler = paystackPop.setup({
+          key: data.publicKey,
+          email: email.trim(),
+          amount: data.amountSubunit,
+          currency: data.currency || "KES",
+          ref: data.reference,
+          channels: ["card", "apple_pay"], // DIRECTLY REQUESTS CARD DETAILS!
+          metadata: {
+            nomineeId: nominee.id,
+            nomineeName: displayName,
+            numberOfVotes: cardQuantity,
+          },
+          callback: async (paystackRes: { reference: string }) => {
+            setCardBusy(true);
+            try {
+              const verifyRes = await fetch("/api/paystack/verify", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ reference: paystackRes.reference }),
+              });
+              const verifyData = (await verifyRes.json()) as {
+                success?: boolean;
+                numberOfVotes?: number;
+                receiptNumber?: string;
+                error?: string;
+              };
+              if (verifyData.success) {
+                setCardSuccess({
+                  numberOfVotes: verifyData.numberOfVotes || cardQuantity,
+                  receiptNumber: verifyData.receiptNumber || paystackRes.reference,
+                });
+                router.refresh();
+              } else {
+                setCardError(verifyData.error || "Payment verification failed.");
+              }
+            } catch {
+              setCardError("Payment was received, refreshing transaction...");
+            } finally {
+              setCardBusy(false);
+            }
+          },
+          onClose: () => {
+            setCardBusy(false);
+          },
+        });
+        handler.openIframe();
+      } else {
+        // Fallback: Redirect to Paystack secure checkout
+        window.location.href = data.authorizationUrl;
+      }
     } catch (err) {
       setCardError(err instanceof Error ? err.message : "Payment initialization failed.");
       setCardBusy(false);
     }
   }
+
+  const successResult = cardSuccess
+    ? { votes: cardSuccess.numberOfVotes, receipt: cardSuccess.receiptNumber }
+    : mpesaState.status === "success"
+    ? { votes: mpesaState.numberOfVotes, receipt: mpesaState.receiptNumber }
+    : null;
 
   return (
     <div
@@ -218,8 +303,8 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
           </button>
         </div>
 
-        {/* State: M-Pesa Success */}
-        {mpesaState.status === "success" ? (
+        {/* State: Success (M-Pesa or Card) */}
+        {successResult ? (
           <section className="py-6 text-center" aria-live="polite">
             <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
               <Check className="size-8" strokeWidth={3} />
@@ -230,17 +315,17 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
             </h3>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               <strong className="font-bold text-slate-900 dark:text-white">
-                {mpesaState.numberOfVotes} {mpesaState.numberOfVotes === 1 ? "vote" : "votes"}
+                {successResult.votes} {successResult.votes === 1 ? "vote" : "votes"}
               </strong>{" "}
               credited to{" "}
               <strong className="font-bold text-slate-900 dark:text-white">{displayName}</strong>
             </p>
 
-            {mpesaState.receiptNumber && (
+            {successResult.receipt && (
               <div className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 <span>Receipt:</span>
                 <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                  {mpesaState.receiptNumber}
+                  {successResult.receipt}
                 </span>
               </div>
             )}
@@ -292,8 +377,8 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
         ) : (
           /* Normal State: Select Payment Method & Package */
           <div className="mt-4">
-            {/* Payment Method Selector Tabs */}
-            <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+            {/* Prominent Payment Method Selector Tabs */}
+            <div className="grid grid-cols-2 gap-2 rounded-2xl bg-slate-100 p-1.5 dark:bg-slate-800">
               <button
                 type="button"
                 onClick={() => {
@@ -301,13 +386,13 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   resetMpesa();
                   setCardError("");
                 }}
-                className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all ${
+                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all ${
                   paymentMethod === "mpesa"
-                    ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-900 dark:text-emerald-400"
+                    ? "bg-white text-emerald-700 shadow-md dark:bg-slate-900 dark:text-emerald-400"
                     : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
-                <Smartphone className="size-3.5" />
+                <Smartphone className="size-4 text-emerald-600 dark:text-emerald-400" />
                 <span>M-Pesa (Kenya)</span>
               </button>
 
@@ -318,14 +403,14 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   resetMpesa();
                   setCardError("");
                 }}
-                className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all ${
+                className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-bold transition-all ${
                   paymentMethod === "card"
-                    ? "bg-white text-sky-700 shadow-sm dark:bg-slate-900 dark:text-sky-400"
+                    ? "bg-white text-sky-700 shadow-md dark:bg-slate-900 dark:text-sky-400"
                     : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
-                <CreditCard className="size-3.5" />
-                <span>Card / Diaspora ($)</span>
+                <CreditCard className="size-4 text-sky-600 dark:text-sky-400" />
+                <span>Card (Visa / Mastercard)</span>
               </button>
             </div>
 
@@ -487,13 +572,13 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
             {/* TAB 2: PAYSTACK CARD VOTING FORM */}
             {paymentMethod === "card" && (
               <form className="mt-4" onSubmit={handleCardSubmit}>
-                <div className="mb-3 flex items-center justify-between rounded-lg border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/40 dark:text-sky-200">
+                <div className="mb-3 flex items-center justify-between rounded-xl border border-sky-100 bg-sky-50/80 p-2.5 text-xs text-sky-950 dark:border-sky-900/40 dark:bg-sky-950/40 dark:text-sky-200">
                   <div className="flex items-center gap-1.5">
-                    <Globe className="size-3.5 text-sky-600 dark:text-sky-400" />
-                    <span className="font-semibold">Diaspora & Card Voting</span>
+                    <Globe className="size-4 text-sky-600 dark:text-sky-400" />
+                    <span className="font-bold">Card Checkout (On-Site)</span>
                   </div>
-                  <span className="rounded bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
-                    Min $4 USD
+                  <span className="rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
+                    Min $4 USD · 50 Votes
                   </span>
                 </div>
 
@@ -591,7 +676,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   >
                     <span>Voter Email Address</span>
                     <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
-                      Card receipt sent here
+                      Receipt sent here
                     </span>
                   </label>
                   <div className="relative mt-1.5">
@@ -624,7 +709,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   >
                     {emailError
                       ? "Please enter a valid email address."
-                      : "Paystack secure checkout opens after clicking continue."}
+                      : "Paystack secure card modal will open directly on your screen."}
                   </p>
                 </div>
 
@@ -646,7 +731,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   {cardBusy ? (
                     <>
                       <LoaderCircle className="size-4 animate-spin" />
-                      <span>Opening Paystack Checkout...</span>
+                      <span>Opening Secure Card Dialog...</span>
                     </>
                   ) : (
                     <span>Pay ${cardAmountUsd.toFixed(2)} USD with Card</span>

@@ -92,12 +92,21 @@ export async function POST(request: Request) {
       reference: transactionId,
     });
 
+    const publicKey =
+      process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ||
+      process.env.PAYSTACK_PUBLIC_KEY ||
+      "pk_test_428175e4061a5f5a1c6b4c900ba9bb53677847b9";
+
     return NextResponse.json(
       {
         authorizationUrl: result.authorizationUrl,
+        accessCode: result.accessCode,
         reference: result.reference,
         amountUsd: pricing.amountUsd,
+        amountSubunit: pricing.amountSubunit,
+        currency: pricing.currency,
         numberOfVotes: pricing.numberOfVotes,
+        publicKey,
       },
       { status: 200 }
     );
