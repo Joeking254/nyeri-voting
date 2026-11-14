@@ -159,11 +159,6 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
 
       const data = (await response.json()) as {
         authorizationUrl?: string;
-        accessCode?: string;
-        reference?: string;
-        amountSubunit?: number;
-        currency?: string;
-        publicKey?: string;
         error?: string;
       };
 
@@ -171,61 +166,8 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
         throw new Error(data.error || "Could not initialize card checkout. Try again.");
       }
 
-      // Check if Paystack Inline JS is ready for On-Site card input
-      const paystackPop = (window as unknown as { PaystackPop?: { setup: (opts: unknown) => { openIframe: () => void } } }).PaystackPop;
-
-      if (paystackPop && data.publicKey && data.reference && data.amountSubunit) {
-        // Launch Paystack Card Modal directly ON-SITE!
-        const handler = paystackPop.setup({
-          key: data.publicKey,
-          email: email.trim(),
-          amount: data.amountSubunit,
-          currency: data.currency || "KES",
-          ref: data.reference,
-          channels: ["card", "apple_pay"], // DIRECTLY REQUESTS CARD DETAILS!
-          metadata: {
-            nomineeId: nominee.id,
-            nomineeName: displayName,
-            numberOfVotes: cardQuantity,
-          },
-          callback: async (paystackRes: { reference: string }) => {
-            setCardBusy(true);
-            try {
-              const verifyRes = await fetch("/api/paystack/verify", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ reference: paystackRes.reference }),
-              });
-              const verifyData = (await verifyRes.json()) as {
-                success?: boolean;
-                numberOfVotes?: number;
-                receiptNumber?: string;
-                error?: string;
-              };
-              if (verifyData.success) {
-                setCardSuccess({
-                  numberOfVotes: verifyData.numberOfVotes || cardQuantity,
-                  receiptNumber: verifyData.receiptNumber || paystackRes.reference,
-                });
-                router.refresh();
-              } else {
-                setCardError(verifyData.error || "Payment verification failed.");
-              }
-            } catch {
-              setCardError("Payment was received, refreshing transaction...");
-            } finally {
-              setCardBusy(false);
-            }
-          },
-          onClose: () => {
-            setCardBusy(false);
-          },
-        });
-        handler.openIframe();
-      } else {
-        // Fallback: Redirect to Paystack secure checkout
-        window.location.href = data.authorizationUrl;
-      }
+      // Smooth, reliable redirect to Paystack's official secure card checkout
+      window.location.href = data.authorizationUrl;
     } catch (err) {
       setCardError(err instanceof Error ? err.message : "Payment initialization failed.");
       setCardBusy(false);
@@ -709,7 +651,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   >
                     {emailError
                       ? "Please enter a valid email address."
-                      : "Paystack secure card modal will open directly on your screen."}
+                      : "You will enter your Card Number, Expiry, and CVV on Paystack's 256-bit encrypted checkout."}
                   </p>
                 </div>
 
@@ -731,10 +673,10 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   {cardBusy ? (
                     <>
                       <LoaderCircle className="size-4 animate-spin" />
-                      <span>Opening Secure Card Dialog...</span>
+                      <span>Opening Paystack Card Checkout...</span>
                     </>
                   ) : (
-                    <span>Pay ${cardAmountUsd.toFixed(2)} USD with Card</span>
+                    <span>Proceed to Pay ${cardAmountUsd.toFixed(2)} USD</span>
                   )}
                 </button>
               </form>
