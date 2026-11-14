@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Check, LoaderCircle, ShieldCheck, Smartphone, X } from "lucide-react";
+import {
+  AlertCircle,
+  Check,
+  CreditCard,
+  Globe,
+  LoaderCircle,
+  ShieldCheck,
+  Smartphone,
+  X,
+} from "lucide-react";
 import type { NomineeCardData } from "@/components/nominee-card";
 import { normalizePhoneNumber, useMpesaVote } from "@/hooks/useMpesaVote";
 
@@ -12,7 +21,9 @@ type VotingModalProps = {
   votePrice: number;
 };
 
-const presets = [1, 5, 10, 25];
+const mpesaPresets = [1, 5, 10, 25];
+const cardPresets = [50, 100, 250, 500];
+const USD_PER_VOTE = 0.08; // 50 votes = $4.00 minimum
 
 function formatPhoneInput(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 12);
@@ -27,18 +38,34 @@ function formatPhoneInput(value: string) {
 
 export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
   const router = useRouter();
+  const [paymentMethod, setPaymentMethod] = useState<"mpesa" | "card">("mpesa");
+
+  // M-Pesa State
   const phoneInputRef = useRef<HTMLInputElement>(null);
   const [phoneNumber, setPhoneNumber] = useState("");
-  const [quantity, setQuantity] = useState(1);
-  const [customQuantity, setCustomQuantity] = useState(false);
+  const [mpesaQuantity, setMpesaQuantity] = useState(1);
+  const [mpesaCustom, setMpesaCustom] = useState(false);
   const [phoneTouched, setPhoneTouched] = useState(false);
-  const { state, startVote, reset } = useMpesaVote();
+  const { state: mpesaState, startVote, reset: resetMpesa } = useMpesaVote();
 
-  const amount = quantity * votePrice;
+  // Card / Paystack State
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const [email, setEmail] = useState("");
+  const [cardQuantity, setCardQuantity] = useState(50);
+  const [cardCustom, setCardCustom] = useState(false);
+  const [emailTouched, setEmailTouched] = useState(false);
+  const [cardBusy, setCardBusy] = useState(false);
+  const [cardError, setCardError] = useState("");
+
+  const mpesaAmount = mpesaQuantity * votePrice;
+  const cardAmountUsd = Math.max(4, Number((cardQuantity * USD_PER_VOTE).toFixed(2)));
+
   const normalizedPhone = normalizePhoneNumber(phoneNumber);
   const phoneError = phoneTouched && (!phoneNumber || !normalizedPhone);
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const emailError = emailTouched && !emailValid;
 
-  const isBusy = state.status === "sending" || state.status === "polling";
+  const isBusy = mpesaState.status === "sending" || mpesaState.status === "polling" || cardBusy;
   const displayName = nominee.stageName || nominee.fullName;
 
   // Lock body scroll while modal is active
@@ -63,27 +90,67 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
 
   // Refresh server-rendered counts on successful vote
   useEffect(() => {
-    if (state.status === "success") {
+    if (mpesaState.status === "success") {
       router.refresh();
     }
-  }, [state.status, router]);
+  }, [mpesaState.status, router]);
 
   function voteAgain() {
-    reset();
+    resetMpesa();
     setPhoneNumber("");
     setPhoneTouched(false);
-    setQuantity(1);
-    setCustomQuantity(false);
+    setMpesaQuantity(1);
+    setMpesaCustom(false);
+    setCardQuantity(50);
+    setCardCustom(false);
+    setEmail("");
+    setEmailTouched(false);
+    setCardError("");
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  function handleMpesaSubmit(event: React.FormEvent) {
     event.preventDefault();
     setPhoneTouched(true);
     if (!normalizedPhone) {
       phoneInputRef.current?.focus();
       return;
     }
-    void startVote({ nomineeId: nominee.id, phoneNumber: normalizedPhone, numberOfVotes: quantity });
+    void startVote({
+      nomineeId: nominee.id,
+      phoneNumber: normalizedPhone,
+      numberOfVotes: mpesaQuantity,
+    });
+  }
+
+  async function handleCardSubmit(event: React.FormEvent) {
+    event.preventDefault();
+    setEmailTouched(true);
+    if (!emailValid) {
+      emailInputRef.current?.focus();
+      return;
+    }
+    setCardBusy(true);
+    setCardError("");
+    try {
+      const response = await fetch("/api/paystack/initiate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nomineeId: nominee.id,
+          email: email.trim(),
+          numberOfVotes: cardQuantity,
+        }),
+      });
+      const data = (await response.json()) as { authorizationUrl?: string; error?: string };
+      if (!response.ok || !data.authorizationUrl) {
+        throw new Error(data.error || "Could not initialize card checkout. Try again.");
+      }
+      // Redirect to Paystack secure checkout
+      window.location.href = data.authorizationUrl;
+    } catch (err) {
+      setCardError(err instanceof Error ? err.message : "Payment initialization failed.");
+      setCardBusy(false);
+    }
   }
 
   return (
@@ -151,8 +218,8 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
           </button>
         </div>
 
-        {/* State: Success */}
-        {state.status === "success" ? (
+        {/* State: M-Pesa Success */}
+        {mpesaState.status === "success" ? (
           <section className="py-6 text-center" aria-live="polite">
             <div className="mx-auto flex size-16 items-center justify-center rounded-full bg-emerald-100 text-emerald-600 dark:bg-emerald-950 dark:text-emerald-400">
               <Check className="size-8" strokeWidth={3} />
@@ -163,17 +230,17 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
             </h3>
             <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
               <strong className="font-bold text-slate-900 dark:text-white">
-                {state.numberOfVotes} {state.numberOfVotes === 1 ? "vote" : "votes"}
+                {mpesaState.numberOfVotes} {mpesaState.numberOfVotes === 1 ? "vote" : "votes"}
               </strong>{" "}
               credited to{" "}
               <strong className="font-bold text-slate-900 dark:text-white">{displayName}</strong>
             </p>
 
-            {state.receiptNumber && (
+            {mpesaState.receiptNumber && (
               <div className="mx-auto mt-4 inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
                 <span>Receipt:</span>
                 <span className="font-mono text-emerald-600 dark:text-emerald-400">
-                  {state.receiptNumber}
+                  {mpesaState.receiptNumber}
                 </span>
               </div>
             )}
@@ -195,8 +262,8 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
               </button>
             </div>
           </section>
-        ) : state.status === "sending" || state.status === "polling" ? (
-          /* State: Sending / Waiting for PIN */
+        ) : mpesaState.status === "sending" || mpesaState.status === "polling" ? (
+          /* State: Sending / Waiting for M-Pesa PIN */
           <section className="py-8 text-center" role="status" aria-live="polite">
             <div className="relative mx-auto flex size-16 items-center justify-center">
               <span className="absolute size-full animate-ping rounded-full bg-emerald-400/20" />
@@ -206,13 +273,13 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
             </div>
 
             <h3 className="mt-5 text-lg font-extrabold text-slate-950 dark:text-white">
-              {state.status === "sending"
+              {mpesaState.status === "sending"
                 ? "Sending M-Pesa STK Prompt..."
                 : "Prompt Sent to Your Handset!"}
             </h3>
 
             <p className="mx-auto mt-2 max-w-xs text-sm leading-relaxed text-slate-600 dark:text-slate-300">
-              {state.status === "sending"
+              {mpesaState.status === "sending"
                 ? "Contacting Safaricom..."
                 : "Check your phone screen and enter your M-Pesa PIN to complete payment."}
             </p>
@@ -223,165 +290,376 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
             </div>
           </section>
         ) : (
-          /* State: Choose Votes & Enter Phone */
-          <form className="mt-5" onSubmit={handleSubmit}>
-            {/* Presets Grid */}
-            <fieldset>
-              <legend className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                Select Vote Count
-              </legend>
-              <div className="mt-2.5 grid grid-cols-4 gap-2">
-                {presets.map((value) => {
-                  const isSelected = !customQuantity && quantity === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={isSelected}
-                      onClick={() => {
-                        setCustomQuantity(false);
-                        setQuantity(value);
-                        reset();
-                      }}
-                      className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all ${
-                        isSelected
-                          ? "border-sky-600 bg-sky-50 font-bold text-sky-900 shadow-sm dark:border-sky-500 dark:bg-sky-950/60 dark:text-sky-200"
-                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:hover:bg-slate-800"
-                      }`}
-                    >
-                      <span className="text-sm font-extrabold">
-                        {value} {value === 1 ? "Vote" : "Votes"}
-                      </span>
-                      <span className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                        KES {value * votePrice}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="mt-2">
-                <button
-                  type="button"
-                  aria-pressed={customQuantity}
-                  onClick={() => {
-                    setCustomQuantity(true);
-                    setQuantity(1);
-                    reset();
-                  }}
-                  className={`w-full rounded-xl border py-2 text-xs font-bold transition-all ${
-                    customQuantity
-                      ? "border-sky-600 bg-sky-50 text-sky-900 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-200"
-                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-300"
-                  }`}
-                >
-                  Enter Custom Quantity
-                </button>
-              </div>
-            </fieldset>
-
-            {/* Custom Quantity Input */}
-            {customQuantity && (
-              <label className="mt-3 block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Number of votes:
-                <input
-                  className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-900 outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
-                  type="number"
-                  min="1"
-                  max="214748364"
-                  step="1"
-                  value={quantity}
-                  onChange={(event) => {
-                    setQuantity(Math.max(1, Number(event.target.value) || 1));
-                    reset();
-                  }}
-                />
-              </label>
-            )}
-
-            {/* Total Summary Banner */}
-            <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-100 p-3.5 dark:bg-slate-800">
-              <div>
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                  Total Due
-                </span>
-                <p className="text-xs text-slate-500">
-                  {quantity} {quantity === 1 ? "vote" : "votes"} × KES {votePrice}
-                </p>
-              </div>
-              <span className="text-xl font-extrabold tabular-nums text-slate-950 dark:text-white">
-                KES {amount.toLocaleString()}
-              </span>
-            </div>
-
-            {/* Phone Number Input */}
-            <div className="mt-4">
-              <label
-                className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
-                htmlFor="mpesa-phone"
-              >
-                <span>M-Pesa Mobile Number</span>
-                <span className="text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
-                  Safaricom / Airtel
-                </span>
-              </label>
-              <div className="relative mt-1.5">
-                <input
-                  ref={phoneInputRef}
-                  id="mpesa-phone"
-                  className={`h-12 w-full rounded-xl border px-3.5 text-sm font-semibold tracking-wide text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 focus:ring-2 dark:text-white ${
-                    phoneError
-                      ? "border-rose-500 bg-rose-50/20 focus:ring-rose-100 dark:border-rose-500 dark:bg-rose-950/20"
-                      : "border-slate-300 bg-white focus:border-emerald-600 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-800"
-                  }`}
-                  type="tel"
-                  inputMode="tel"
-                  autoComplete="tel"
-                  placeholder="0712 345 678 or 0110 123 456"
-                  value={phoneNumber}
-                  onChange={(event) => {
-                    setPhoneNumber(formatPhoneInput(event.target.value));
-                    if (phoneTouched) setPhoneTouched(false);
-                  }}
-                  onBlur={() => setPhoneTouched(true)}
-                  aria-invalid={phoneError}
-                />
-              </div>
-              <p
-                className={`mt-1.5 text-xs ${
-                  phoneError ? "font-semibold text-rose-600 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"
+          /* Normal State: Select Payment Method & Package */
+          <div className="mt-4">
+            {/* Payment Method Selector Tabs */}
+            <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-100 p-1 dark:bg-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentMethod("mpesa");
+                  resetMpesa();
+                  setCardError("");
+                }}
+                className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all ${
+                  paymentMethod === "mpesa"
+                    ? "bg-white text-emerald-700 shadow-sm dark:bg-slate-900 dark:text-emerald-400"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 }`}
               >
-                {phoneError
-                  ? "Please enter a valid Kenyan mobile number (e.g. 07XXXXXXXX or 01XXXXXXXX)."
-                  : "We'll send an instant STK prompt to this phone."}
-              </p>
+                <Smartphone className="size-3.5" />
+                <span>M-Pesa (Kenya)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setPaymentMethod("card");
+                  resetMpesa();
+                  setCardError("");
+                }}
+                className={`flex items-center justify-center gap-2 rounded-lg py-2.5 text-xs font-bold transition-all ${
+                  paymentMethod === "card"
+                    ? "bg-white text-sky-700 shadow-sm dark:bg-slate-900 dark:text-sky-400"
+                    : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                }`}
+              >
+                <CreditCard className="size-3.5" />
+                <span>Card / Diaspora ($)</span>
+              </button>
             </div>
 
-            {/* Error Banner */}
-            {state.status === "error" && (
-              <div
-                className="mt-4 flex gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-200"
-                role="alert"
-              >
-                <AlertCircle className="size-4 shrink-0 text-rose-600" />
-                <p>{state.message}</p>
-              </div>
+            {/* TAB 1: M-PESA VOTING FORM */}
+            {paymentMethod === "mpesa" && (
+              <form className="mt-4" onSubmit={handleMpesaSubmit}>
+                <fieldset>
+                  <legend className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Select Vote Count
+                  </legend>
+                  <div className="mt-2 grid grid-cols-4 gap-2">
+                    {mpesaPresets.map((value) => {
+                      const isSelected = !mpesaCustom && mpesaQuantity === value;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => {
+                            setMpesaCustom(false);
+                            setMpesaQuantity(value);
+                            resetMpesa();
+                          }}
+                          className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all ${
+                            isSelected
+                              ? "border-emerald-600 bg-emerald-50 font-bold text-emerald-900 shadow-sm dark:border-emerald-500 dark:bg-emerald-950/60 dark:text-emerald-200"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          <span className="text-sm font-extrabold">
+                            {value} {value === 1 ? "Vote" : "Votes"}
+                          </span>
+                          <span className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                            KES {value * votePrice}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      aria-pressed={mpesaCustom}
+                      onClick={() => {
+                        setMpesaCustom(true);
+                        setMpesaQuantity(1);
+                        resetMpesa();
+                      }}
+                      className={`w-full rounded-xl border py-2 text-xs font-bold transition-all ${
+                        mpesaCustom
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-900 dark:border-emerald-500 dark:bg-emerald-950 dark:text-emerald-200"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-300"
+                      }`}
+                    >
+                      Enter Custom Quantity
+                    </button>
+                  </div>
+                </fieldset>
+
+                {mpesaCustom && (
+                  <label className="mt-3 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Number of votes:
+                    <input
+                      className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-900 outline-none focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      type="number"
+                      min="1"
+                      max="214748364"
+                      step="1"
+                      value={mpesaQuantity}
+                      onChange={(event) => {
+                        setMpesaQuantity(Math.max(1, Number(event.target.value) || 1));
+                        resetMpesa();
+                      }}
+                    />
+                  </label>
+                )}
+
+                {/* Total Summary */}
+                <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-100 p-3.5 dark:bg-slate-800">
+                  <div>
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Total Due
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      {mpesaQuantity} {mpesaQuantity === 1 ? "vote" : "votes"} × KES {votePrice}
+                    </p>
+                  </div>
+                  <span className="text-xl font-extrabold tabular-nums text-slate-950 dark:text-white">
+                    KES {mpesaAmount.toLocaleString()}
+                  </span>
+                </div>
+
+                {/* Phone Input */}
+                <div className="mt-4">
+                  <label
+                    className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                    htmlFor="mpesa-phone"
+                  >
+                    <span>M-Pesa Mobile Number</span>
+                    <span className="text-[10px] font-normal text-emerald-600 dark:text-emerald-400">
+                      Safaricom / Airtel
+                    </span>
+                  </label>
+                  <div className="relative mt-1.5">
+                    <input
+                      ref={phoneInputRef}
+                      id="mpesa-phone"
+                      className={`h-12 w-full rounded-xl border px-3.5 text-sm font-semibold tracking-wide text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 focus:ring-2 dark:text-white ${
+                        phoneError
+                          ? "border-rose-500 bg-rose-50/20 focus:ring-rose-100 dark:border-rose-500 dark:bg-rose-950/20"
+                          : "border-slate-300 bg-white focus:border-emerald-600 focus:ring-emerald-100 dark:border-slate-700 dark:bg-slate-800"
+                      }`}
+                      type="tel"
+                      inputMode="tel"
+                      autoComplete="tel"
+                      placeholder="0712 345 678 or 0110 123 456"
+                      value={phoneNumber}
+                      onChange={(event) => {
+                        setPhoneNumber(formatPhoneInput(event.target.value));
+                        if (phoneTouched) setPhoneTouched(false);
+                      }}
+                      onBlur={() => setPhoneTouched(true)}
+                      aria-invalid={phoneError}
+                    />
+                  </div>
+                  <p
+                    className={`mt-1.5 text-xs ${
+                      phoneError
+                        ? "font-semibold text-rose-600 dark:text-rose-400"
+                        : "text-slate-500 dark:text-slate-400"
+                    }`}
+                  >
+                    {phoneError
+                      ? "Please enter a valid Kenyan mobile number (e.g. 07XXXXXXXX or 01XXXXXXXX)."
+                      : "We'll send an instant STK prompt to this phone."}
+                  </p>
+                </div>
+
+                {mpesaState.status === "error" && (
+                  <div
+                    className="mt-4 flex gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-200"
+                    role="alert"
+                  >
+                    <AlertCircle className="size-4 shrink-0 text-rose-600" />
+                    <p>{mpesaState.message}</p>
+                  </div>
+                )}
+
+                <button
+                  className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
+                  type="submit"
+                >
+                  <span>Pay KES {mpesaAmount.toLocaleString()} with M-Pesa</span>
+                </button>
+              </form>
             )}
 
-            {/* Submit Button */}
-            <button
-              className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white shadow-md shadow-emerald-600/20 transition-all hover:bg-emerald-700 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-600"
-              type="submit"
-            >
-              <span>Pay KES {amount.toLocaleString()} with M-Pesa</span>
-            </button>
+            {/* TAB 2: PAYSTACK CARD VOTING FORM */}
+            {paymentMethod === "card" && (
+              <form className="mt-4" onSubmit={handleCardSubmit}>
+                <div className="mb-3 flex items-center justify-between rounded-lg border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-sky-900 dark:border-sky-900/40 dark:bg-sky-950/40 dark:text-sky-200">
+                  <div className="flex items-center gap-1.5">
+                    <Globe className="size-3.5 text-sky-600 dark:text-sky-400" />
+                    <span className="font-semibold">Diaspora & Card Voting</span>
+                  </div>
+                  <span className="rounded bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">
+                    Min $4 USD
+                  </span>
+                </div>
+
+                <fieldset>
+                  <legend className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Select Card Package
+                  </legend>
+                  <div className="mt-2 grid grid-cols-4 gap-2">
+                    {cardPresets.map((value) => {
+                      const isSelected = !cardCustom && cardQuantity === value;
+                      const priceUsd = Math.max(4, Number((value * USD_PER_VOTE).toFixed(2)));
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={isSelected}
+                          onClick={() => {
+                            setCardCustom(false);
+                            setCardQuantity(value);
+                            setCardError("");
+                          }}
+                          className={`flex flex-col items-center justify-center rounded-xl border p-2.5 transition-all ${
+                            isSelected
+                              ? "border-sky-600 bg-sky-50 font-bold text-sky-900 shadow-sm dark:border-sky-500 dark:bg-sky-950/60 dark:text-sky-200"
+                              : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-200 dark:hover:bg-slate-800"
+                          }`}
+                        >
+                          <span className="text-sm font-extrabold">{value} Votes</span>
+                          <span className="mt-0.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                            ${priceUsd} USD
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-2">
+                    <button
+                      type="button"
+                      aria-pressed={cardCustom}
+                      onClick={() => {
+                        setCardCustom(true);
+                        setCardQuantity(50);
+                        setCardError("");
+                      }}
+                      className={`w-full rounded-xl border py-2 text-xs font-bold transition-all ${
+                        cardCustom
+                          ? "border-sky-600 bg-sky-50 text-sky-900 dark:border-sky-500 dark:bg-sky-950 dark:text-sky-200"
+                          : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-300"
+                      }`}
+                    >
+                      Enter Custom Quantity (Min 50 Votes)
+                    </button>
+                  </div>
+                </fieldset>
+
+                {cardCustom && (
+                  <label className="mt-3 block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                    Number of votes (minimum 50):
+                    <input
+                      className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-900 outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                      type="number"
+                      min="50"
+                      max="100000"
+                      step="1"
+                      value={cardQuantity}
+                      onChange={(event) => {
+                        setCardQuantity(Math.max(50, Number(event.target.value) || 50));
+                        setCardError("");
+                      }}
+                    />
+                  </label>
+                )}
+
+                {/* Total Summary */}
+                <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-100 p-3.5 dark:bg-slate-800">
+                  <div>
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      Total Due
+                    </span>
+                    <p className="text-xs text-slate-500">
+                      {cardQuantity} votes (approx. KES {(cardQuantity * votePrice).toLocaleString()})
+                    </p>
+                  </div>
+                  <span className="text-xl font-extrabold tabular-nums text-slate-950 dark:text-white">
+                    ${cardAmountUsd.toFixed(2)} USD
+                  </span>
+                </div>
+
+                {/* Email Input */}
+                <div className="mt-4">
+                  <label
+                    className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
+                    htmlFor="card-email"
+                  >
+                    <span>Voter Email Address</span>
+                    <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
+                      Card receipt sent here
+                    </span>
+                  </label>
+                  <div className="relative mt-1.5">
+                    <input
+                      ref={emailInputRef}
+                      id="card-email"
+                      className={`h-12 w-full rounded-xl border px-3.5 text-sm font-semibold tracking-wide text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 focus:ring-2 dark:text-white ${
+                        emailError
+                          ? "border-rose-500 bg-rose-50/20 focus:ring-rose-100 dark:border-rose-500 dark:bg-rose-950/20"
+                          : "border-slate-300 bg-white focus:border-sky-600 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-800"
+                      }`}
+                      type="email"
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(event) => {
+                        setEmail(event.target.value);
+                        if (emailTouched) setEmailTouched(false);
+                      }}
+                      onBlur={() => setEmailTouched(true)}
+                      aria-invalid={emailError}
+                    />
+                  </div>
+                  <p
+                    className={`mt-1.5 text-xs ${
+                      emailError
+                        ? "font-semibold text-rose-600 dark:text-rose-400"
+                        : "text-slate-500 dark:text-slate-400"
+                    }`}
+                  >
+                    {emailError
+                      ? "Please enter a valid email address."
+                      : "Paystack secure checkout opens after clicking continue."}
+                  </p>
+                </div>
+
+                {cardError && (
+                  <div
+                    className="mt-4 flex gap-2.5 rounded-xl border border-rose-200 bg-rose-50 p-3.5 text-xs font-medium text-rose-800 dark:border-rose-900/40 dark:bg-rose-950/40 dark:text-rose-200"
+                    role="alert"
+                  >
+                    <AlertCircle className="size-4 shrink-0 text-rose-600" />
+                    <p>{cardError}</p>
+                  </div>
+                )}
+
+                <button
+                  disabled={cardBusy}
+                  className="mt-5 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 text-sm font-bold text-white shadow-md shadow-sky-600/20 transition-all hover:bg-sky-700 hover:shadow-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-600 disabled:opacity-60"
+                  type="submit"
+                >
+                  {cardBusy ? (
+                    <>
+                      <LoaderCircle className="size-4 animate-spin" />
+                      <span>Opening Paystack Checkout...</span>
+                    </>
+                  ) : (
+                    <span>Pay ${cardAmountUsd.toFixed(2)} USD with Card</span>
+                  )}
+                </button>
+              </form>
+            )}
 
             <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-slate-400">
               <ShieldCheck className="size-3.5 text-emerald-500" />
-              <span>Safe & secure encrypted checkout</span>
+              <span>Safe & secure 256-bit encrypted checkout</span>
             </div>
-          </form>
+          </div>
         )}
       </div>
     </div>

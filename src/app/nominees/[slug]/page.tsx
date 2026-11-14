@@ -8,7 +8,10 @@ import { CheckCircle2, ChevronRight, ExternalLink, MapPin, ShieldCheck, Trophy, 
 
 export const dynamic = "force-dynamic";
 
-type Props = { params: Promise<{ slug: string }> };
+type Props = {
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ vote_status?: string; votes?: string; receipt?: string }>;
+};
 
 function safeSocialLinks(value: unknown): Array<[string, string]> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
@@ -23,8 +26,9 @@ function safeSocialLinks(value: unknown): Array<[string, string]> {
   });
 }
 
-export default async function NomineeProfilePage({ params }: Props) {
+export default async function NomineeProfilePage({ params, searchParams }: Props) {
   const { slug } = await params;
+  const search = searchParams ? await searchParams : {};
   const nominee = await prisma.nominee.findFirst({
     where: { slug, isActive: true, isApproved: true, category: { isActive: true } },
     include: { category: { select: { id: true, name: true, votingOpen: true } } },
@@ -75,6 +79,19 @@ export default async function NomineeProfilePage({ params }: Props) {
           <ChevronRight className="size-3.5" />
           <span className="font-semibold text-slate-900 dark:text-white">{displayName}</span>
         </nav>
+
+        {/* Card Payment Confirmation Banner */}
+        {search?.vote_status === "success" && (
+          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
+            <CheckCircle2 className="size-6 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <div>
+              <p className="font-bold">Card Payment Successful!</p>
+              <p className="text-xs text-emerald-800 dark:text-emerald-300">
+                {search.votes ? `${search.votes} votes were` : "Your votes were"} credited to {displayName}. Receipt: {search.receipt || "Confirmed"}
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* Profile Showcase Card */}
         <article className="overflow-hidden rounded-3xl border border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">

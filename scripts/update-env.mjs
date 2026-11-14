@@ -20,6 +20,12 @@ if (fs.existsSync(envPath)) {
     }
   }
 
+  if (!content.includes("PAYSTACK_SECRET_KEY")) {
+    content += `\n# Paystack (Card / International Diaspora Payments)\nPAYSTACK_SECRET_KEY=""\nPAYSTACK_PUBLIC_KEY=""\nPAYSTACK_CURRENCY="USD"\nPAYSTACK_MIN_AMOUNT_USD="4"\n`;
+    modified = true;
+    console.log("[Auto-Env] Added Paystack configuration placeholders to .env");
+  }
+
   if (modified) {
     fs.writeFileSync(envPath, content, "utf8");
     console.log("[Auto-Env] Successfully updated .env with live EC2 IP http://13.62.100.156");
