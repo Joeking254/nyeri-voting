@@ -22,8 +22,8 @@ type VotingModalProps = {
 };
 
 const mpesaPresets = [1, 5, 10, 25];
-const cardPresets = [50, 100, 250, 500];
-const USD_PER_VOTE = 0.08; // 50 votes = $4.00 minimum
+const cardPresets = [25, 50, 100, 250];
+const USD_PER_VOTE = 0.08; // 25 votes = $2.00 minimum
 
 function formatPhoneInput(value: string) {
   const digits = value.replace(/\D/g, "").slice(0, 12);
@@ -51,7 +51,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
   // Card / Paystack State
   const emailInputRef = useRef<HTMLInputElement>(null);
   const [email, setEmail] = useState("");
-  const [cardQuantity, setCardQuantity] = useState(50);
+  const [cardQuantity, setCardQuantity] = useState(25);
   const [cardCustom, setCardCustom] = useState(false);
   const [emailTouched, setEmailTouched] = useState(false);
   const [cardBusy, setCardBusy] = useState(false);
@@ -62,7 +62,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
   } | null>(null);
 
   const mpesaAmount = mpesaQuantity * votePrice;
-  const cardAmountUsd = Math.max(4, Number((cardQuantity * USD_PER_VOTE).toFixed(2)));
+  const cardAmountUsd = Math.max(2, Number((cardQuantity * USD_PER_VOTE).toFixed(2)));
 
   const normalizedPhone = normalizePhoneNumber(phoneNumber);
   const phoneError = phoneTouched && (!phoneNumber || !normalizedPhone);
@@ -115,7 +115,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
     setPhoneTouched(false);
     setMpesaQuantity(1);
     setMpesaCustom(false);
-    setCardQuantity(50);
+    setCardQuantity(25);
     setCardCustom(false);
     setEmail("");
     setEmailTouched(false);
@@ -520,7 +520,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                     <span className="font-bold">Card Checkout (On-Site)</span>
                   </div>
                   <span className="rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-xs">
-                    Min $4 USD · 50 Votes
+                    Min $2 USD · 25 Votes
                   </span>
                 </div>
 
@@ -531,7 +531,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   <div className="mt-2 grid grid-cols-4 gap-2">
                     {cardPresets.map((value) => {
                       const isSelected = !cardCustom && cardQuantity === value;
-                      const priceUsd = Math.max(4, Number((value * USD_PER_VOTE).toFixed(2)));
+                      const priceUsd = Math.max(2, Number((value * USD_PER_VOTE).toFixed(2)));
                       return (
                         <button
                           key={value}
@@ -563,7 +563,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                       aria-pressed={cardCustom}
                       onClick={() => {
                         setCardCustom(true);
-                        setCardQuantity(50);
+                        setCardQuantity(25);
                         setCardError("");
                       }}
                       className={`w-full rounded-xl border py-2 text-xs font-bold transition-all ${
@@ -572,23 +572,23 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                           : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-850 dark:text-slate-300"
                       }`}
                     >
-                      Enter Custom Quantity (Min 50 Votes)
+                      Enter Custom Quantity (Min 25 Votes)
                     </button>
                   </div>
                 </fieldset>
 
                 {cardCustom && (
                   <label className="mt-3 block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                    Number of votes (minimum 50):
+                    Number of votes (minimum 25):
                     <input
                       className="mt-1 h-11 w-full rounded-xl border border-slate-300 bg-white px-3 font-semibold text-slate-900 outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
                       type="number"
-                      min="50"
+                      min="25"
                       max="100000"
                       step="1"
                       value={cardQuantity}
                       onChange={(event) => {
-                        setCardQuantity(Math.max(50, Number(event.target.value) || 50));
+                        setCardQuantity(Math.max(25, Number(event.target.value) || 25));
                         setCardError("");
                       }}
                     />

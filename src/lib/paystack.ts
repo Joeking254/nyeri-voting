@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export const PAYSTACK_MIN_USD = 4;
-export const USD_PER_VOTE = 0.08; // 50 votes = $4.00
+export const PAYSTACK_MIN_USD = 2;
+export const USD_PER_VOTE = 0.08; // 25 votes = $2.00
 
 export function isPaystackConfigured(): boolean {
   return Boolean(process.env.PAYSTACK_SECRET_KEY);
@@ -30,16 +30,16 @@ export function getPaystackCurrency(): string {
 export function calculatePaystackAmount(numberOfVotes: number): {
   numberOfVotes: number;
   amountUsd: number;
-  amountSubunit: number; // in cents (e.g. 400 for $4)
+  amountSubunit: number; // in cents (e.g. 200 for $2)
   currency: string;
 } {
   const currency = getPaystackCurrency();
-  // Ensure minimum is 50 votes ($4.00)
-  const votes = Math.max(50, Number.isSafeInteger(numberOfVotes) ? numberOfVotes : 50);
+  // Ensure minimum is 25 votes ($2.00)
+  const votes = Math.max(25, Number.isSafeInteger(numberOfVotes) ? numberOfVotes : 25);
   const amountUsd = Math.max(PAYSTACK_MIN_USD, Number((votes * USD_PER_VOTE).toFixed(2)));
 
   // If currency is USD, subunit is cents (1 USD = 100 cents)
-  // If currency is KES, approximately 1 USD ~ 130 KES, so 1 vote = KES 10, min 50 votes = KES 500 = 50000 cents
+  // If currency is KES, approximately 1 USD ~ 130 KES, so 1 vote = KES 10, min 25 votes = KES 250 = 25000 cents
   const amountSubunit =
     currency === "USD"
       ? Math.round(amountUsd * 100)
