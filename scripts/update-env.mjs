@@ -27,13 +27,18 @@ if (fs.existsSync(envPath)) {
     content += `\n# Paystack (Card / International Diaspora Payments)\nPAYSTACK_SECRET_KEY="${testSecret}"\nPAYSTACK_PUBLIC_KEY="${testPublic}"\nPAYSTACK_CURRENCY="KES"\nPAYSTACK_MIN_AMOUNT_USD="4"\n`;
     modified = true;
     console.log("[Auto-Env] Added Paystack test credentials to .env");
-  } else if (content.includes('PAYSTACK_SECRET_KEY=""') || !content.includes(testSecret)) {
+  } else if (content.includes('PAYSTACK_SECRET_KEY=""') || content.includes('PAYSTACK_SECRET_KEY=" "')) {
+    // Only inject default test keys if it is currently blank
     content = content.replace(/PAYSTACK_SECRET_KEY=.*$/m, `PAYSTACK_SECRET_KEY="${testSecret}"`);
     content = content.replace(/PAYSTACK_PUBLIC_KEY=.*$/m, `PAYSTACK_PUBLIC_KEY="${testPublic}"`);
     content = content.replace(/PAYSTACK_CURRENCY=.*$/m, `PAYSTACK_CURRENCY="KES"`);
     content = content.replace(/PAYSTACK_MIN_AMOUNT_USD=.*$/m, `PAYSTACK_MIN_AMOUNT_USD="4"`);
     modified = true;
-    console.log("[Auto-Env] Updated Paystack credentials with active test keys in .env");
+    console.log("[Auto-Env] Updated Paystack blank credentials with test keys in .env");
+  } else if (content.includes("sk_live_")) {
+    console.log("[Auto-Env] Paystack is running in LIVE production mode with sk_live_ keys.");
+  } else {
+    console.log("[Auto-Env] Paystack credentials already configured in .env.");
   }
 
   if (modified) {
