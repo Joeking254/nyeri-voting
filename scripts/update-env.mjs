@@ -20,10 +20,20 @@ if (fs.existsSync(envPath)) {
     }
   }
 
+  const testSecret = "sk_test_1a54cf4b5718b2709f10e432d34cd6b05e88e07e";
+  const testPublic = "pk_test_428175e4061a5f5a1c6b4c900ba9bb53677847b9";
+
   if (!content.includes("PAYSTACK_SECRET_KEY")) {
-    content += `\n# Paystack (Card / International Diaspora Payments)\nPAYSTACK_SECRET_KEY=""\nPAYSTACK_PUBLIC_KEY=""\nPAYSTACK_CURRENCY="USD"\nPAYSTACK_MIN_AMOUNT_USD="4"\n`;
+    content += `\n# Paystack (Card / International Diaspora Payments)\nPAYSTACK_SECRET_KEY="${testSecret}"\nPAYSTACK_PUBLIC_KEY="${testPublic}"\nPAYSTACK_CURRENCY="KES"\nPAYSTACK_MIN_AMOUNT_USD="4"\n`;
     modified = true;
-    console.log("[Auto-Env] Added Paystack configuration placeholders to .env");
+    console.log("[Auto-Env] Added Paystack test credentials to .env");
+  } else if (content.includes('PAYSTACK_SECRET_KEY=""') || !content.includes(testSecret)) {
+    content = content.replace(/PAYSTACK_SECRET_KEY=.*$/m, `PAYSTACK_SECRET_KEY="${testSecret}"`);
+    content = content.replace(/PAYSTACK_PUBLIC_KEY=.*$/m, `PAYSTACK_PUBLIC_KEY="${testPublic}"`);
+    content = content.replace(/PAYSTACK_CURRENCY=.*$/m, `PAYSTACK_CURRENCY="KES"`);
+    content = content.replace(/PAYSTACK_MIN_AMOUNT_USD=.*$/m, `PAYSTACK_MIN_AMOUNT_USD="4"`);
+    modified = true;
+    console.log("[Auto-Env] Updated Paystack credentials with active test keys in .env");
   }
 
   if (modified) {

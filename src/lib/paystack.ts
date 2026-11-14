@@ -24,7 +24,7 @@ export function getPaystackPublicKey(): string {
 }
 
 export function getPaystackCurrency(): string {
-  return (process.env.PAYSTACK_CURRENCY || "USD").toUpperCase().trim();
+  return (process.env.PAYSTACK_CURRENCY || "KES").toUpperCase().trim();
 }
 
 export function calculatePaystackAmount(numberOfVotes: number): {
@@ -113,7 +113,7 @@ export async function initiatePaystackTransaction(
     },
   };
 
-  const response = await fetch("https://api.paystack.co/transaction/initialize", {
+  let response = await fetch("https://api.paystack.co/transaction/initialize", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${secretKey}`,
@@ -124,10 +124,11 @@ export async function initiatePaystackTransaction(
     signal: AbortSignal.timeout(15_000),
   });
 
-  const rawText = await response.text();
+  let rawText = await response.text();
   let result: {
     status: boolean;
     message?: string;
+    code?: string;
     data?: {
       authorization_url: string;
       access_code: string;
@@ -139,6 +140,29 @@ export async function initiatePaystackTransaction(
     result = JSON.parse(rawText);
   } catch {
     throw new Error(`Paystack returned invalid response (${response.status}): ${rawText.slice(0, 100)}`);
+  }
+
+  // Smart fallback: If merchant integration rejects USD, automatically retry in KES
+  if (!response.ok && result?.code === "unsupported_currency" && payload.currency !== "KES") {
+    console.log("Paystack merchant requires KES currency, retrying with KES equivalent...");
+    payload.currency = "KES";
+    payload.amount = Math.round(pricing.numberOfVotes * 10 * 100);
+    response = await fetch("https://api.paystack.co/transaction/initialize", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${secretKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      signal: AbortSignal.timeout(15_000),
+    });
+    rawText = await response.text();
+    try {
+      result = JSON.parse(rawText);
+    } catch {
+      throw new Error(`Paystack retry returned invalid response (${response.status})`);
+    }
   }
 
   if (!response.ok || !result?.status || !result.data?.authorization_url) {
