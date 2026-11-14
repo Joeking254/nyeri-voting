@@ -4,6 +4,8 @@ import { Header } from "@/components/header";
 import { NomineeMediaStage } from "@/components/nominee-media-stage";
 import { ProfileVoteActions } from "@/components/profile-vote-actions";
 import { prisma } from "@/lib/prisma";
+import { verifyPaystackTransaction } from "@/lib/paystack";
+import { claimPaymentAndIncrementVotes } from "@/lib/vote-counts";
 import { CheckCircle2, ChevronRight, ExternalLink, MapPin, ShieldCheck, Trophy, Users } from "lucide-react";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +31,36 @@ function safeSocialLinks(value: unknown): Array<[string, string]> {
 export default async function NomineeProfilePage({ params, searchParams }: Props) {
   const { slug } = await params;
   const search = searchParams ? await searchParams : {};
+
+  // Auto-verify and claim pending transaction if user returns with receipt
+  if (search?.receipt) {
+    try {
+      const pendingTx = await prisma.voteTransaction.findFirst({
+        where: {
+          status: "PENDING",
+          OR: [{ id: search.receipt }, { transactionId: search.receipt }],
+        },
+      });
+      if (pendingTx) {
+        const verification = await verifyPaystackTransaction(pendingTx.transactionId || pendingTx.id);
+        if (verification.success && verification.data?.status?.toLowerCase() === "success") {
+          const receiptNumber = `PSTK-${pendingTx.id.replace(/-/g, "").slice(-12).toUpperCase()}`;
+          await prisma.$transaction(async (database) => {
+            await claimPaymentAndIncrementVotes(database, {
+              transactionId: pendingTx.id,
+              nomineeId: pendingTx.nomineeId,
+              categoryId: pendingTx.categoryId,
+              numberOfVotes: pendingTx.numberOfVotes,
+              receiptNumber,
+            });
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Auto-reconciliation on profile page failed:", err);
+    }
+  }
+
   const nominee = await prisma.nominee.findFirst({
     where: { slug, isActive: true, isApproved: true, category: { isActive: true } },
     include: { category: { select: { id: true, name: true, votingOpen: true } } },

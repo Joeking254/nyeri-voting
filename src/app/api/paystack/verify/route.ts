@@ -28,14 +28,21 @@ export async function POST(request: Request) {
       );
     }
 
-    const tx = await prisma.voteTransaction.findUnique({
-      where: { id: reference },
+    const tx = await prisma.voteTransaction.findFirst({
+      where: {
+        OR: [
+          { id: reference },
+          { transactionId: reference },
+        ],
+      },
       include: { nominee: { select: { fullName: true, stageName: true } } },
     });
 
     if (!tx) {
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
+
+    const receiptNumber = `PSTK-${tx.id.replace(/-/g, "").slice(-12).toUpperCase()}`;
 
     if (tx.status === "PENDING") {
       await prisma.$transaction(async (database) => {
@@ -44,7 +51,7 @@ export async function POST(request: Request) {
           nomineeId: tx.nomineeId,
           categoryId: tx.categoryId,
           numberOfVotes: tx.numberOfVotes,
-          receiptNumber: `PSTK-${reference.slice(-10).toUpperCase()}`,
+          receiptNumber,
         });
       });
     }
@@ -52,7 +59,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       numberOfVotes: tx.numberOfVotes,
-      receiptNumber: `PSTK-${reference.slice(-10).toUpperCase()}`,
+      receiptNumber,
       nomineeName: tx.nominee?.stageName || tx.nominee?.fullName,
     });
   } catch (err) {

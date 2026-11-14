@@ -9,7 +9,9 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const reference = url.searchParams.get("reference") || url.searchParams.get("trxref");
 
-  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://13.62.100.156").replace(/\/$/, "");
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "13.62.100.156";
+  const proto = request.headers.get("x-forwarded-proto") || "http";
+  const appUrl = `${proto}://${host}`;
 
   if (!reference) {
     return NextResponse.redirect(`${appUrl}/?error=missing_reference`);
@@ -23,8 +25,13 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${appUrl}/?error=verification_failed`);
     }
 
-    const tx = await prisma.voteTransaction.findUnique({
-      where: { id: reference },
+    const tx = await prisma.voteTransaction.findFirst({
+      where: {
+        OR: [
+          { id: reference },
+          { transactionId: reference },
+        ],
+      },
       include: { nominee: { select: { slug: true, fullName: true, stageName: true } } },
     });
 
@@ -34,14 +41,18 @@ export async function GET(request: Request) {
     }
 
     if (tx.status === "PENDING") {
+      const receiptNumber = `PSTK-${tx.id.replace(/-/g, "").slice(-12).toUpperCase()}`;
       await prisma.$transaction(async (database) => {
-        await claimPaymentAndIncrementVotes(database, {
+        const claimed = await claimPaymentAndIncrementVotes(database, {
           transactionId: tx.id,
           nomineeId: tx.nomineeId,
           categoryId: tx.categoryId,
           numberOfVotes: tx.numberOfVotes,
-          receiptNumber: `PSTK-${reference.slice(-10).toUpperCase()}`,
+          receiptNumber,
         });
+        if (!claimed) {
+          console.warn(`Transaction ${tx.id} was already claimed or processed.`);
+        }
       });
     }
 

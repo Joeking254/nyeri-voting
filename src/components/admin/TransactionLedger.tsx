@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Search } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, RefreshCw, Search } from "lucide-react";
 
 type LedgerRow = { id: string; createdAt: string; phoneNumber: string; numberOfVotes: number; amountPaid: number; status: "PENDING" | "SUCCESS" | "FAILED"; mpesaReceiptNumber: string | null; nominee: { fullName: string; stageName: string | null }; category: { name: string } };
 const statusClass = { SUCCESS: "bg-emerald-50 text-emerald-800", PENDING: "bg-amber-50 text-amber-800", FAILED: "bg-rose-50 text-rose-800" };
@@ -16,6 +16,8 @@ export function TransactionLedger() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
 
   const refresh = useCallback(async () => {
     setLoading(true); setError("");
@@ -47,10 +49,56 @@ export function TransactionLedger() {
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = "nyeri-vote-ledger.csv"; anchor.click(); URL.revokeObjectURL(url);
   }
 
+  async function syncPaystack() {
+    setSyncing(true);
+    setSyncMessage("");
+    try {
+      const res = await fetch("/api/admin/paystack/sync", { method: "POST" });
+      const data = await res.json() as { success?: boolean; creditedCount?: number; totalChecked?: number; error?: string };
+      if (!res.ok) throw new Error(data.error || "Sync failed");
+      setSyncMessage(`Paystack sync complete: ${data.creditedCount ?? 0} transaction(s) credited out of ${data.totalChecked ?? 0} checked.`);
+      await refresh();
+    } catch (err) {
+      setSyncMessage(err instanceof Error ? err.message : "Sync failed");
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   const pages = Math.max(1, Math.ceil(total / 50));
   return (
     <div>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Finance & audit</p><h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Payment ledger</h1><p className="mt-1 text-sm text-slate-600">{total.toLocaleString()} matching transactions</p></div><button type="button" onClick={() => void exportCsv()} className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"><Download className="size-4" aria-hidden="true" />Export CSV</button></div>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.12em] text-slate-500">Finance & audit</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-950">Payment ledger</h1>
+          <p className="mt-1 text-sm text-slate-600">{total.toLocaleString()} matching transactions</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void syncPaystack()}
+            disabled={syncing}
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-sky-600 bg-sky-50 px-3 text-sm font-semibold text-sky-800 hover:bg-sky-100 disabled:opacity-50"
+          >
+            <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} aria-hidden="true" />
+            <span>{syncing ? "Syncing Paystack..." : "Sync Paystack Votes"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void exportCsv()}
+            className="inline-flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-sky-700"
+          >
+            <Download className="size-4" aria-hidden="true" />
+            Export CSV
+          </button>
+        </div>
+      </div>
+      {syncMessage && (
+        <p className="mb-4 rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800">
+          {syncMessage}
+        </p>
+      )}
       <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-[minmax(200px,1fr)_150px_160px_160px]">
         <label className="relative"><span className="sr-only">Search ledger</span><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" /><input className="h-10 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-sm outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100" placeholder="Phone, receipt, nominee..." value={query} onChange={(event) => { setPage(0); setQuery(event.target.value); }} /></label>
         <label className="sr-only" htmlFor="ledger-status">Status</label><select id="ledger-status" className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700" value={status} onChange={(event) => { setPage(0); setStatus(event.target.value); }}><option value="">All statuses</option><option value="SUCCESS">Success</option><option value="PENDING">Pending</option><option value="FAILED">Failed</option></select>

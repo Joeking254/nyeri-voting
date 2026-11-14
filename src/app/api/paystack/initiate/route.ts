@@ -67,7 +67,8 @@ export async function POST(request: Request) {
 
   const transactionId = crypto.randomUUID();
 
-  // Create pending vote transaction
+  // Create pending vote transaction (amountPaid stored in KES integer equivalent)
+  const amountPaidKes = Math.round(pricing.numberOfVotes * 10);
   await prisma.voteTransaction.create({
     data: {
       id: transactionId,
@@ -75,11 +76,15 @@ export async function POST(request: Request) {
       nomineeId: nominee.id,
       categoryId: nominee.categoryId,
       numberOfVotes: pricing.numberOfVotes,
-      amountPaid: pricing.amountUsd, // Store USD dollars (e.g. 4)
+      amountPaid: amountPaidKes,
       status: "PENDING",
       transactionId,
     },
   });
+
+  const host = request.headers.get("x-forwarded-host") || request.headers.get("host") || "13.62.100.156";
+  const proto = request.headers.get("x-forwarded-proto") || "http";
+  const callbackUrl = `${proto}://${host}/api/paystack/callback`;
 
   try {
     const result = await initiatePaystackTransaction({
@@ -90,6 +95,7 @@ export async function POST(request: Request) {
       categoryId: nominee.category.id,
       categoryName: nominee.category.name,
       reference: transactionId,
+      callbackUrl,
     });
 
     const publicKey =

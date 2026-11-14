@@ -23,18 +23,24 @@ export async function POST(request: Request) {
   if (event.event === "charge.success" && event.data?.reference) {
     const reference = event.data.reference;
     try {
-      const tx = await prisma.voteTransaction.findUnique({
-        where: { id: reference },
+      const tx = await prisma.voteTransaction.findFirst({
+        where: {
+          OR: [
+            { id: reference },
+            { transactionId: reference },
+          ],
+        },
       });
 
       if (tx && tx.status === "PENDING") {
+        const receiptNumber = `PSTK-${tx.id.replace(/-/g, "").slice(-12).toUpperCase()}`;
         await prisma.$transaction(async (database) => {
           await claimPaymentAndIncrementVotes(database, {
             transactionId: tx.id,
             nomineeId: tx.nomineeId,
             categoryId: tx.categoryId,
             numberOfVotes: tx.numberOfVotes,
-            receiptNumber: `PSTK-${reference.slice(-10).toUpperCase()}`,
+            receiptNumber,
           });
         });
       }
