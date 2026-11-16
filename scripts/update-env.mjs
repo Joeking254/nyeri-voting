@@ -46,6 +46,12 @@ if (fs.existsSync(envPath)) {
     modified = true;
   }
 
+  if (!content.includes("ADMIN_SECRET_KEY")) {
+    content += `\n# Admin Secret Gate Key (Cloaks the admin portal with 404 unless ?gate=... is used)\nADMIN_SECRET_KEY="nyeri-admin-vault-2026"\n`;
+    modified = true;
+    console.log("[Auto-Env] Added ADMIN_SECRET_KEY to .env");
+  }
+
   if (modified) {
     fs.writeFileSync(envPath, content, "utf8");
     console.log("[Auto-Env] Successfully updated .env with live EC2 IP http://13.62.100.156");
