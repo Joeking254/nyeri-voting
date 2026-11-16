@@ -37,7 +37,7 @@ export async function GET(request: Request) {
   const exporting = params.get("export") === "csv";
   const take = exporting ? 10000 : 50;
   const skip = exporting ? 0 : Math.max(0, Math.min(Number(params.get("page") || 0), 10000)) * take;
-  const [transactions, total] = await Promise.all([
+  const [transactions, total, successAgg, pendingCount, failedCount] = await Promise.all([
     prisma.voteTransaction.findMany({
       where,
       orderBy: { createdAt: "desc" },
@@ -56,6 +56,13 @@ export async function GET(request: Request) {
       },
     }),
     prisma.voteTransaction.count({ where }),
+    prisma.voteTransaction.aggregate({
+      where: { status: "SUCCESS" },
+      _sum: { amountPaid: true, numberOfVotes: true },
+      _count: true,
+    }),
+    prisma.voteTransaction.count({ where: { status: "PENDING" } }),
+    prisma.voteTransaction.count({ where: { status: "FAILED" } }),
   ]);
   const rows = transactions.map((transaction) => ({
     ...transaction,
@@ -69,5 +76,18 @@ export async function GET(request: Request) {
       headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="nyeri-vote-ledger.csv"', "Cache-Control": "no-store" },
     });
   }
-  return NextResponse.json({ transactions: rows, total, page: Math.floor(skip / take), pageSize: take });
+  return NextResponse.json({
+    transactions: rows,
+    total,
+    page: Math.floor(skip / take),
+    pageSize: take,
+    summary: {
+      totalRevenue: successAgg._sum.amountPaid ?? 0,
+      totalVotes: Number(successAgg._sum.numberOfVotes ?? 0),
+      successfulCount: successAgg._count ?? 0,
+      pendingCount,
+      failedCount,
+    },
+    lastSyncedAt: new Date().toISOString(),
+  });
 }
