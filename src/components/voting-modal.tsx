@@ -45,6 +45,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
   const [phoneNumber, setPhoneNumber] = useState("");
   const [mpesaQuantity, setMpesaQuantity] = useState(1);
   const [mpesaCustom, setMpesaCustom] = useState(false);
+  const [mpesaCustomInput, setMpesaCustomInput] = useState("1");
   const [phoneTouched, setPhoneTouched] = useState(false);
   const { state: mpesaState, startVote, reset: resetMpesa } = useMpesaVote();
 
@@ -53,6 +54,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
   const [email, setEmail] = useState("");
   const [cardQuantity, setCardQuantity] = useState(25);
   const [cardCustom, setCardCustom] = useState(false);
+  const [cardCustomInput, setCardCustomInput] = useState("25");
   const [emailTouched, setEmailTouched] = useState(false);
   const [cardBusy, setCardBusy] = useState(false);
   const [cardError, setCardError] = useState("");
@@ -61,8 +63,15 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
     receiptNumber: string;
   } | null>(null);
 
-  const mpesaAmount = mpesaQuantity * votePrice;
-  const cardAmountUsd = Math.max(2, Number((cardQuantity * USD_PER_VOTE).toFixed(2)));
+  const effectiveMpesaVotes = mpesaCustom
+    ? Math.max(1, parseInt(mpesaCustomInput, 10) || 1)
+    : mpesaQuantity;
+  const mpesaAmount = effectiveMpesaVotes * votePrice;
+
+  const effectiveCardVotes = cardCustom
+    ? Math.max(25, parseInt(cardCustomInput, 10) || 25)
+    : cardQuantity;
+  const cardAmountUsd = Math.max(2, Number((effectiveCardVotes * USD_PER_VOTE).toFixed(2)));
 
   const normalizedPhone = normalizePhoneNumber(phoneNumber);
   const phoneError = phoneTouched && (!phoneNumber || !normalizedPhone);
@@ -115,8 +124,10 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
     setPhoneTouched(false);
     setMpesaQuantity(1);
     setMpesaCustom(false);
+    setMpesaCustomInput("1");
     setCardQuantity(25);
     setCardCustom(false);
+    setCardCustomInput("25");
     setEmail("");
     setEmailTouched(false);
     setCardError("");
@@ -133,7 +144,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
     void startVote({
       nomineeId: nominee.id,
       phoneNumber: normalizedPhone,
-      numberOfVotes: mpesaQuantity,
+      numberOfVotes: effectiveMpesaVotes,
     });
   }
 
@@ -153,7 +164,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
         body: JSON.stringify({
           nomineeId: nominee.id,
           email: email.trim(),
-          numberOfVotes: cardQuantity,
+          numberOfVotes: effectiveCardVotes,
         }),
       });
 
@@ -399,6 +410,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                       aria-pressed={mpesaCustom}
                       onClick={() => {
                         setMpesaCustom(true);
+                        setMpesaCustomInput("1");
                         setMpesaQuantity(1);
                         resetMpesa();
                       }}
@@ -422,10 +434,25 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                       min="1"
                       max="214748364"
                       step="1"
-                      value={mpesaQuantity}
+                      placeholder="Enter votes"
+                      value={mpesaCustomInput}
                       onChange={(event) => {
-                        setMpesaQuantity(Math.max(1, Number(event.target.value) || 1));
+                        const val = event.target.value;
+                        setMpesaCustomInput(val);
+                        const parsed = parseInt(val, 10);
+                        if (!Number.isNaN(parsed) && parsed > 0) {
+                          setMpesaQuantity(parsed);
+                        }
                         resetMpesa();
+                      }}
+                      onBlur={() => {
+                        const parsed = parseInt(mpesaCustomInput, 10);
+                        if (Number.isNaN(parsed) || parsed < 1) {
+                          setMpesaCustomInput("1");
+                          setMpesaQuantity(1);
+                        } else {
+                          setMpesaQuantity(parsed);
+                        }
                       }}
                     />
                   </label>
@@ -438,7 +465,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                       Total Due
                     </span>
                     <p className="text-xs text-slate-500">
-                      {mpesaQuantity} {mpesaQuantity === 1 ? "vote" : "votes"} × KES {votePrice}
+                      {effectiveMpesaVotes} {effectiveMpesaVotes === 1 ? "vote" : "votes"} × KES {votePrice}
                     </p>
                   </div>
                   <span className="text-xl font-extrabold tabular-nums text-slate-950 dark:text-white">
@@ -563,6 +590,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                       aria-pressed={cardCustom}
                       onClick={() => {
                         setCardCustom(true);
+                        setCardCustomInput("25");
                         setCardQuantity(25);
                         setCardError("");
                       }}
@@ -586,10 +614,25 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                       min="25"
                       max="100000"
                       step="1"
-                      value={cardQuantity}
+                      placeholder="Enter votes (min 25)"
+                      value={cardCustomInput}
                       onChange={(event) => {
-                        setCardQuantity(Math.max(25, Number(event.target.value) || 25));
+                        const val = event.target.value;
+                        setCardCustomInput(val);
+                        const parsed = parseInt(val, 10);
+                        if (!Number.isNaN(parsed) && parsed > 0) {
+                          setCardQuantity(parsed);
+                        }
                         setCardError("");
+                      }}
+                      onBlur={() => {
+                        const parsed = parseInt(cardCustomInput, 10);
+                        if (Number.isNaN(parsed) || parsed < 25) {
+                          setCardCustomInput("25");
+                          setCardQuantity(25);
+                        } else {
+                          setCardQuantity(parsed);
+                        }
                       }}
                     />
                   </label>
@@ -602,7 +645,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                       Total Due
                     </span>
                     <p className="text-xs text-slate-500">
-                      {cardQuantity} votes (approx. KES {(cardQuantity * votePrice).toLocaleString()})
+                      {effectiveCardVotes} votes (approx. KES {(effectiveCardVotes * votePrice).toLocaleString()})
                     </p>
                   </div>
                   <span className="text-xl font-extrabold tabular-nums text-slate-950 dark:text-white">
