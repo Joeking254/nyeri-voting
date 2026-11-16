@@ -24,12 +24,15 @@ type LedgerRow = {
   amountPaid: number;
   status: "PENDING" | "SUCCESS" | "FAILED";
   mpesaReceiptNumber: string | null;
+  method?: "M-PESA" | "CARD";
   nominee: { fullName: string; stageName: string | null };
   category: { name: string };
 };
 
 type LedgerSummary = {
   totalRevenue: number;
+  mpesaRevenue: number;
+  cardRevenue: number;
   totalVotes: number;
   successfulCount: number;
   pendingCount: number;
@@ -46,12 +49,15 @@ export function TransactionLedger() {
   const [rows, setRows] = useState<LedgerRow[]>([]);
   const [summary, setSummary] = useState<LedgerSummary>({
     totalRevenue: 0,
+    mpesaRevenue: 0,
+    cardRevenue: 0,
     totalVotes: 0,
     successfulCount: 0,
     pendingCount: 0,
     failedCount: 0,
   });
   const [query, setQuery] = useState("");
+  const [method, setMethod] = useState("");
   const [status, setStatus] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -71,6 +77,7 @@ export function TransactionLedger() {
       try {
         const params = new URLSearchParams({ page: String(page) });
         if (query.trim()) params.set("q", query.trim());
+        if (method) params.set("method", method);
         if (status) params.set("status", status);
         if (from) params.set("from", from);
         if (to) params.set("to", to);
@@ -92,7 +99,7 @@ export function TransactionLedger() {
         if (isManual) setLoading(false);
       }
     },
-    [page, query, status, from, to]
+    [page, query, method, status, from, to]
   );
 
   // Initial load
@@ -112,6 +119,7 @@ export function TransactionLedger() {
   async function exportCsv() {
     const params = new URLSearchParams({ export: "csv" });
     if (query.trim()) params.set("q", query.trim());
+    if (method) params.set("method", method);
     if (status) params.set("status", status);
     if (from) params.set("from", from);
     if (to) params.set("to", to);
@@ -227,7 +235,11 @@ export function TransactionLedger() {
           <p className="mt-2 text-xl font-extrabold text-emerald-950 sm:text-2xl">
             KES {summary.totalRevenue.toLocaleString()}
           </p>
-          <p className="mt-0.5 text-[11px] text-emerald-700">M-Pesa & Card verified</p>
+          <p className="mt-1 flex flex-wrap gap-x-2 text-[11px] font-medium text-emerald-800">
+            <span>M-Pesa: KES {summary.mpesaRevenue.toLocaleString()}</span>
+            <span>•</span>
+            <span>Card: KES {summary.cardRevenue.toLocaleString()}</span>
+          </p>
         </div>
 
         <div className="rounded-xl border border-sky-200 bg-sky-50/60 p-4">
@@ -270,14 +282,14 @@ export function TransactionLedger() {
         </p>
       )}
 
-      {/* Filter Bar */}
-      <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-[minmax(200px,1fr)_150px_160px_160px]">
+      {/* Filter Bar with Method Selector */}
+      <div className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-3 sm:grid-cols-2 lg:grid-cols-[minmax(180px,1fr)_140px_130px_150px_150px]">
         <label className="relative">
           <span className="sr-only">Search ledger</span>
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
           <input
             className="h-10 w-full rounded-lg border border-slate-300 pl-9 pr-3 text-sm outline-none focus:border-sky-600 focus:ring-2 focus:ring-sky-100"
-            placeholder="Phone, receipt, nominee..."
+            placeholder="Phone, email, receipt, nominee..."
             value={query}
             onChange={(event) => {
               setPage(0);
@@ -285,6 +297,22 @@ export function TransactionLedger() {
             }}
           />
         </label>
+        <label className="sr-only" htmlFor="ledger-method">
+          Payment Method
+        </label>
+        <select
+          id="ledger-method"
+          className="h-10 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700"
+          value={method}
+          onChange={(event) => {
+            setPage(0);
+            setMethod(event.target.value);
+          }}
+        >
+          <option value="">All Methods</option>
+          <option value="MPESA">M-Pesa (Kenya)</option>
+          <option value="CARD">Card (Visa/Mastercard)</option>
+        </select>
         <label className="sr-only" htmlFor="ledger-status">
           Status
         </label>
@@ -297,7 +325,7 @@ export function TransactionLedger() {
             setStatus(event.target.value);
           }}
         >
-          <option value="">All statuses</option>
+          <option value="">All Statuses</option>
           <option value="SUCCESS">Success</option>
           <option value="PENDING">Pending</option>
           <option value="FAILED">Failed</option>
@@ -338,15 +366,15 @@ export function TransactionLedger() {
         </p>
       )}
 
-      {/* Table */}
+      {/* Table with Method Column */}
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-left text-sm">
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">Date / Time</th>
-                <th className="px-4 py-3">Channel</th>
-                <th className="px-4 py-3">Payer / Phone</th>
+                <th className="px-4 py-3">Method</th>
+                <th className="px-4 py-3">Payer (Phone / Email)</th>
                 <th className="px-4 py-3">Nominee</th>
                 <th className="px-4 py-3">Category</th>
                 <th className="px-4 py-3 text-right">Votes</th>
@@ -357,23 +385,24 @@ export function TransactionLedger() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((row) => {
-                const isCard = (row.mpesaReceiptNumber || "").startsWith("PSTK-");
+                const isCard = row.method === "CARD" || (row.mpesaReceiptNumber || "").startsWith("PSTK-") || row.phoneNumber.includes("@");
                 return (
                   <tr key={row.id} className="transition-colors hover:bg-slate-50">
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {new Date(row.createdAt).toLocaleString()}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3">
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-bold ${
-                          isCard
-                            ? "bg-sky-100 text-sky-800"
-                            : "bg-emerald-100 text-emerald-800"
-                        }`}
-                      >
-                        {isCard ? <CreditCard className="size-3" /> : <Smartphone className="size-3" />}
-                        {isCard ? "CARD" : "M-PESA"}
-                      </span>
+                      {isCard ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-bold text-sky-800">
+                          <CreditCard className="size-3 text-sky-600" />
+                          CARD
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                          <Smartphone className="size-3 text-emerald-600" />
+                          M-PESA
+                        </span>
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-slate-700">
                       {row.phoneNumber}
