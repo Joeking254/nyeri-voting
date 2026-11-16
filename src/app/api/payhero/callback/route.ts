@@ -81,11 +81,30 @@ export async function POST(request: Request) {
         : ""
   ).toUpperCase();
   const resultCode = data.ResultCode ?? data.result_code;
+
+  const isPending =
+    rawStatus === "QUEUED" ||
+    rawStatus === "PENDING" ||
+    rawStatus === "PROCESSING" ||
+    rawStatus === "INITIATED";
+
+  const isFailed =
+    rawStatus === "FAILED" ||
+    rawStatus === "CANCELLED" ||
+    rawStatus === "REJECTED" ||
+    (typeof resultCode === "number" && resultCode !== 0);
+
+  const receipt =
+    (typeof data.third_party_reference === "string" && data.third_party_reference.trim()) ||
+    (typeof data.provider_reference === "string" && data.provider_reference.trim()) ||
+    (typeof data.MpesaReceiptNumber === "string" && data.MpesaReceiptNumber.trim()) ||
+    (typeof data.mpesa_receipt_number === "string" && data.mpesa_receipt_number.trim()) ||
+    (typeof data.payment_reference === "string" && data.payment_reference.trim()) ||
+    null;
+
   const isSuccess =
-    rawStatus === "SUCCESS" ||
-    resultCode === 0 ||
-    data.success === true ||
-    data.status === true;
+    (rawStatus === "SUCCESS" || resultCode === 0) &&
+    Boolean(receipt);
 
   const externalRef =
     data.ExternalReference ||
@@ -185,7 +204,14 @@ export async function POST(request: Request) {
     });
   }
 
-  if (!isSuccess) {
+  if (isPending) {
+    return NextResponse.json({
+      status: "pending",
+      message: "Transaction is pending PIN confirmation",
+    });
+  }
+
+  if (isFailed) {
     await prisma.voteTransaction.updateMany({
       where: { id: transaction.id, status: "PENDING" },
       data: { status: "FAILED" },
@@ -196,15 +222,12 @@ export async function POST(request: Request) {
     });
   }
 
-  const receipt =
-    (typeof data.third_party_reference === "string" && data.third_party_reference.trim()) ||
-    (typeof data.provider_reference === "string" && data.provider_reference.trim()) ||
-    (typeof data.MpesaReceiptNumber === "string" && data.MpesaReceiptNumber.trim()) ||
-    (typeof data.mpesa_receipt_number === "string" && data.mpesa_receipt_number.trim()) ||
-    (typeof data.payment_reference === "string" && data.payment_reference.trim()) ||
-    (typeof data.reference === "string" && data.reference.trim()) ||
-    (typeof checkoutRequestId === "string" && checkoutRequestId.trim()) ||
-    `PH-${Date.now()}-${transaction.id.slice(0, 6)}`;
+  if (!isSuccess || !receipt) {
+    return NextResponse.json({
+      status: "pending",
+      message: "Waiting for authentic M-Pesa confirmation and receipt",
+    });
+  }
 
   const paidAmount = Number(data.Amount ?? data.amount);
   if (paidAmount && paidAmount !== transaction.amountPaid) {

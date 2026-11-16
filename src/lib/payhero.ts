@@ -242,60 +242,69 @@ export async function checkPayHeroTransactionStatus(
           : ""
     ).toUpperCase();
 
-    const isSuccess =
-      statusUpper === "SUCCESS" ||
-      data.success === true ||
-      data.status === true ||
-      data.ResultCode === 0 ||
-      data.result_code === 0;
-
-    const isFailed =
-      statusUpper === "FAILED" ||
-      statusUpper === "CANCELLED" ||
-      statusUpper === "REJECTED" ||
-      (data.success === false && statusUpper !== "PENDING" && statusUpper !== "QUEUED");
-
-    const isPending =
+    // 1. If payment is still queued, pending or processing, it has NOT reached PIN completion
+    if (
       statusUpper === "QUEUED" ||
       statusUpper === "PENDING" ||
-      statusUpper === "PROCESSING";
-
-    if (isSuccess) {
-      const receipt =
-        (typeof data.third_party_reference === "string" && data.third_party_reference.trim()) ||
-        (typeof data.provider_reference === "string" && data.provider_reference.trim()) ||
-        (typeof data.MpesaReceiptNumber === "string" && data.MpesaReceiptNumber.trim()) ||
-        (typeof data.mpesa_receipt_number === "string" && data.mpesa_receipt_number.trim()) ||
-        (typeof data.payment_reference === "string" && data.payment_reference.trim()) ||
-        (typeof data.reference === "string" && data.reference.trim()) ||
-        reference;
-
-      return {
-        status: "SUCCESS",
-        receiptNumber: receipt,
-        rawStatus: typeof data.status === "string" ? data.status : data.Status || "SUCCESS",
-        amount: typeof data.amount === "number" ? data.amount : typeof data.Amount === "number" ? data.Amount : undefined,
-        phoneNumber: data.phone_number || data.phone || data.Phone || data.PhoneNumber,
-      };
-    }
-
-    if (isFailed) {
-      return {
-        status: "FAILED",
-        rawStatus: typeof data.status === "string" ? data.status : data.Status || "FAILED",
-      };
-    }
-
-    if (isPending) {
+      statusUpper === "PROCESSING" ||
+      statusUpper === "INITIATED"
+    ) {
       return {
         status: "PENDING",
         rawStatus: typeof data.status === "string" ? data.status : data.Status || "PENDING",
       };
     }
 
+    // 2. Explicit failure or cancellation
+    if (
+      statusUpper === "FAILED" ||
+      statusUpper === "CANCELLED" ||
+      statusUpper === "REJECTED" ||
+      (typeof data.ResultCode === "number" && data.ResultCode !== 0) ||
+      (typeof data.result_code === "number" && data.result_code !== 0)
+    ) {
+      return {
+        status: "FAILED",
+        rawStatus: typeof data.status === "string" ? data.status : data.Status || "FAILED",
+      };
+    }
+
+    // 3. Extract authentic M-Pesa receipt code
+    const authenticReceipt =
+      (typeof data.third_party_reference === "string" && data.third_party_reference.trim()) ||
+      (typeof data.provider_reference === "string" && data.provider_reference.trim()) ||
+      (typeof data.MpesaReceiptNumber === "string" && data.MpesaReceiptNumber.trim()) ||
+      (typeof data.mpesa_receipt_number === "string" && data.mpesa_receipt_number.trim()) ||
+      (typeof data.payment_reference === "string" && data.payment_reference.trim()) ||
+      null;
+
+    // 4. A payment is only SUCCESS if explicitly SUCCESS and Safaricom has issued a receipt
+    const isExplicitSuccess =
+      statusUpper === "SUCCESS" ||
+      data.ResultCode === 0 ||
+      data.result_code === 0;
+
+    if (isExplicitSuccess && authenticReceipt) {
+      return {
+        status: "SUCCESS",
+        receiptNumber: authenticReceipt,
+        rawStatus: typeof data.status === "string" ? data.status : data.Status || "SUCCESS",
+        amount: typeof data.amount === "number" ? data.amount : typeof data.Amount === "number" ? data.Amount : undefined,
+        phoneNumber: data.phone_number || data.phone || data.Phone || data.PhoneNumber,
+      };
+    }
+
+    // If explicit success flag without receipt yet, keep waiting
+    if (isExplicitSuccess && !authenticReceipt) {
+      return {
+        status: "PENDING",
+        rawStatus: "WAITING_RECEIPT",
+      };
+    }
+
     return {
-      status: "UNKNOWN",
-      rawStatus: typeof data.status === "string" ? data.status : data.Status,
+      status: "PENDING",
+      rawStatus: typeof data.status === "string" ? data.status : data.Status || "PENDING",
     };
   } catch (error) {
     console.warn("PayHero transaction-status query error:", error);

@@ -93,12 +93,31 @@ export async function POST(request: Request) {
           ? payheroData.status
           : ""
     ).toUpperCase();
+    const isPending =
+      rawStatus === "QUEUED" ||
+      rawStatus === "PENDING" ||
+      rawStatus === "PROCESSING" ||
+      rawStatus === "INITIATED";
+
+    const isFailed =
+      rawStatus === "FAILED" ||
+      rawStatus === "CANCELLED" ||
+      rawStatus === "REJECTED" ||
+      (typeof payheroData.ResultCode === "number" && payheroData.ResultCode !== 0) ||
+      (typeof payheroData.result_code === "number" && payheroData.result_code !== 0);
+
+    const receipt =
+      (typeof payheroData.third_party_reference === "string" && payheroData.third_party_reference.trim()) ||
+      (typeof payheroData.provider_reference === "string" && payheroData.provider_reference.trim()) ||
+      (typeof payheroData.MpesaReceiptNumber === "string" && payheroData.MpesaReceiptNumber.trim()) ||
+      (typeof payheroData.mpesa_receipt_number === "string" && payheroData.mpesa_receipt_number.trim()) ||
+      (typeof payheroData.payment_reference === "string" && payheroData.payment_reference.trim()) ||
+      null;
+
     const isSuccess =
-      rawStatus === "SUCCESS" ||
-      payheroData.status === true ||
-      payheroData.success === true ||
-      payheroData.ResultCode === 0 ||
-      payheroData.result_code === 0;
+      (rawStatus === "SUCCESS" || payheroData.ResultCode === 0 || payheroData.result_code === 0) &&
+      Boolean(receipt);
+
     const externalRef = payheroData.ExternalReference || payheroData.external_reference;
     const checkoutReqId = payheroData.CheckoutRequestID || payheroData.checkout_request_id;
 
@@ -138,7 +157,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
     }
 
-    if (!isSuccess) {
+    if (isPending) {
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Pending" });
+    }
+
+    if (isFailed) {
       await prisma.voteTransaction.updateMany({
         where: { id: transaction.id, status: "PENDING" },
         data: { status: "FAILED" },
@@ -146,14 +169,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ResultCode: 0, ResultDesc: "Accepted" });
     }
 
-    const receipt =
-      (typeof payheroData.third_party_reference === "string" && payheroData.third_party_reference.trim()) ||
-      (typeof payheroData.provider_reference === "string" && payheroData.provider_reference.trim()) ||
-      (typeof payheroData.MpesaReceiptNumber === "string" && payheroData.MpesaReceiptNumber.trim()) ||
-      (typeof payheroData.mpesa_receipt_number === "string" && payheroData.mpesa_receipt_number.trim()) ||
-      (typeof payheroData.payment_reference === "string" && payheroData.payment_reference.trim()) ||
-      (typeof payheroData.reference === "string" && payheroData.reference.trim()) ||
-      `PH-${Date.now()}-${transaction.id.slice(0, 6)}`;
+    if (!isSuccess || !receipt) {
+      return NextResponse.json({ ResultCode: 0, ResultDesc: "Pending" });
+    }
 
     try {
       await prisma.$transaction(async (database) => {
