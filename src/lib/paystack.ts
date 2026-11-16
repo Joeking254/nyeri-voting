@@ -79,12 +79,21 @@ export async function initiatePaystackTransaction(
   const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://13.62.100.156").replace(/\/$/, "");
   const callbackUrl = input.callbackUrl || `${appUrl}/api/paystack/callback`;
 
-  const payload = {
+  const payload: {
+    email: string;
+    amount: number;
+    currency: string;
+    reference: string;
+    callback_url: string;
+    channels: string[];
+    metadata: Record<string, unknown>;
+  } = {
     email: input.email,
     amount: pricing.amountSubunit,
     currency: pricing.currency,
     reference: input.reference,
     callback_url: callbackUrl,
+    channels: ["card", "apple_pay"],
     metadata: {
       transactionId: input.reference,
       nomineeId: input.nomineeId,

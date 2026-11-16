@@ -616,7 +616,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                     className="flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300"
                     htmlFor="card-email"
                   >
-                    <span>Voter Email Address</span>
+                    <span>Voter / Cardholder Email</span>
                     <span className="text-[10px] font-normal text-slate-500 dark:text-slate-400">
                       Receipt sent here
                     </span>
@@ -625,14 +625,17 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                     <input
                       ref={emailInputRef}
                       id="card-email"
+                      name="payer_email"
                       className={`h-12 w-full rounded-xl border px-3.5 text-sm font-semibold tracking-wide text-slate-900 outline-none placeholder:font-normal placeholder:text-slate-400 focus:ring-2 dark:text-white ${
                         emailError
                           ? "border-rose-500 bg-rose-50/20 focus:ring-rose-100 dark:border-rose-500 dark:bg-rose-950/20"
                           : "border-slate-300 bg-white focus:border-sky-600 focus:ring-sky-100 dark:border-slate-700 dark:bg-slate-800"
                       }`}
                       type="email"
-                      autoComplete="email"
-                      placeholder="you@example.com"
+                      autoComplete="off"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      placeholder="voter@example.com"
                       value={email}
                       onChange={(event) => {
                         setEmail(event.target.value);
@@ -651,7 +654,7 @@ export function VotingModal({ nominee, onClose, votePrice }: VotingModalProps) {
                   >
                     {emailError
                       ? "Please enter a valid email address."
-                      : "You will enter your Card Number, Expiry, and CVV on Paystack's 256-bit encrypted checkout."}
+                      : "Enter the email of the person paying (not merchant/admin email). The bank OTP verification code is sent to the cardholder's mobile phone registered with their bank."}
                   </p>
                 </div>
 
