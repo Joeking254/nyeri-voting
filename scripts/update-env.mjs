@@ -52,11 +52,28 @@ if (fs.existsSync(envPath)) {
     console.log("[Auto-Env] Added ADMIN_SECRET_KEY to .env");
   }
 
+  const domain = "https://vote.nexusisp.in";
+  if (
+    content.includes('NEXT_PUBLIC_APP_URL="http://13.62.100.156"') ||
+    content.includes('NEXT_PUBLIC_APP_URL="http://13.61.11.252"') ||
+    content.includes('NEXT_PUBLIC_APP_URL="http://localhost:3000"')
+  ) {
+    content = content.replace(/NEXT_PUBLIC_APP_URL=.*$/m, `NEXT_PUBLIC_APP_URL="${domain}"`);
+    modified = true;
+    console.log(`[Auto-Env] Updated NEXT_PUBLIC_APP_URL -> ${domain}`);
+  }
+
+  if (content.includes('PAYHERO_CALLBACK_URL="http://13.62.100.156') || content.includes('PAYHERO_CALLBACK_URL="http://13.61.11.252')) {
+    content = content.replace(/PAYHERO_CALLBACK_URL="http:\/\/(?:13\.62\.100\.156|13\.61\.11\.252)/g, `PAYHERO_CALLBACK_URL="${domain}`);
+    modified = true;
+    console.log(`[Auto-Env] Updated PAYHERO_CALLBACK_URL -> ${domain}`);
+  }
+
   if (modified) {
     fs.writeFileSync(envPath, content, "utf8");
-    console.log("[Auto-Env] Successfully updated .env with live EC2 IP http://13.62.100.156");
+    console.log(`[Auto-Env] Successfully updated .env configuration.`);
   } else {
-    console.log("[Auto-Env] .env is already up to date with live EC2 IP.");
+    console.log("[Auto-Env] .env is already up to date.");
   }
 } else {
   console.log("[Auto-Env] No .env file found in working directory.");
