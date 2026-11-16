@@ -44,10 +44,6 @@ export function PublicPageShell({
               />
               <span>Nyeri Content Creators Awards 2026</span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400">
-              <ShieldCheck className="size-4" />
-              <span>Verified M-Pesa & PayHero Payments</span>
-            </div>
           </div>
 
           <div className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2 text-xs font-medium text-slate-600 sm:justify-start dark:text-slate-400">
@@ -65,9 +61,12 @@ export function PublicPageShell({
             <Link href="/voting-rules" className="hover:text-sky-700 dark:hover:text-white">Voting Rules</Link>
           </div>
 
-          <p className="mt-6 text-center text-[11px] text-slate-400 sm:text-left">
-            © 2026 Nyeri Content Creators of the Year Awards. All rights reserved.
-          </p>
+          <div className="mt-6 flex flex-col items-center justify-between gap-2 border-t border-slate-100 pt-6 text-center text-[11px] text-slate-500 sm:flex-row sm:text-left dark:border-slate-800 dark:text-slate-400">
+            <p>© 2026 Nyeri Content Creators of the Year Awards. All rights reserved.</p>
+            <p className="font-medium">
+              Designed & Developed by <span className="font-bold text-slate-800 dark:text-white">JKdesign</span>
+            </p>
+          </div>
         </div>
       </footer>
     </main>

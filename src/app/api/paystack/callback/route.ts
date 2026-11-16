@@ -32,7 +32,10 @@ export async function GET(request: Request) {
           { transactionId: reference },
         ],
       },
-      include: { nominee: { select: { slug: true, fullName: true, stageName: true } } },
+      include: {
+        nominee: { select: { slug: true, fullName: true, stageName: true, photoUrl: true } },
+        category: { select: { name: true } },
+      },
     });
 
     if (!tx) {
@@ -40,8 +43,9 @@ export async function GET(request: Request) {
       return NextResponse.redirect(`${appUrl}/?error=transaction_not_found`);
     }
 
+    const receiptNumber = `PSTK-${tx.id.replace(/-/g, "").slice(-12).toUpperCase()}`;
+
     if (tx.status === "PENDING") {
-      const receiptNumber = `PSTK-${tx.id.replace(/-/g, "").slice(-12).toUpperCase()}`;
       await prisma.$transaction(async (database) => {
         const claimed = await claimPaymentAndIncrementVotes(database, {
           transactionId: tx.id,
@@ -56,9 +60,23 @@ export async function GET(request: Request) {
       });
     }
 
+    const nomineeName = tx.nominee?.stageName || tx.nominee?.fullName || "Nominee";
+    const categoryName = tx.category?.name || "";
+    const photoUrl = tx.nominee?.photoUrl || "";
+
+    const queryParams = new URLSearchParams({
+      vote_status: "success",
+      votes: String(tx.numberOfVotes),
+      receipt: receiptNumber,
+      nominee_name: nomineeName,
+      category_name: categoryName,
+      ...(photoUrl ? { photo_url: photoUrl } : {}),
+      ...(tx.nominee?.slug ? { nominee_slug: tx.nominee.slug } : {}),
+    });
+
     const destination = tx.nominee?.slug
-      ? `${appUrl}/nominees/${encodeURIComponent(tx.nominee.slug)}?vote_status=success&votes=${tx.numberOfVotes}&receipt=${encodeURIComponent(reference)}`
-      : `${appUrl}/?vote_status=success&votes=${tx.numberOfVotes}`;
+      ? `${appUrl}/nominees/${encodeURIComponent(tx.nominee.slug)}?${queryParams.toString()}`
+      : `${appUrl}/?${queryParams.toString()}`;
 
     return NextResponse.redirect(destination);
   } catch (err) {

@@ -19,7 +19,20 @@ const emptyPageData = {
   publicVoteCounts: true,
 };
 
-export default async function HomePage() {
+type Props = {
+  searchParams?: Promise<{
+    vote_status?: string;
+    votes?: string;
+    receipt?: string;
+    nominee_name?: string;
+    category_name?: string;
+    photo_url?: string;
+    nominee_slug?: string;
+  }>;
+};
+
+export default async function HomePage({ searchParams }: Props) {
+  const search = searchParams ? await searchParams : {};
   let pageData = emptyPageData;
   try {
     const now = new Date();
@@ -79,5 +92,17 @@ export default async function HomePage() {
     console.error("Unable to load public awards data", error);
   }
 
-  return <AwardsExperience {...pageData} />;
+  const confirmation =
+    search?.vote_status === "success"
+      ? {
+          votes: search.votes || "25",
+          receipt: search.receipt,
+          nomineeName: search.nominee_name || "Nominee",
+          categoryName: search.category_name,
+          photoUrl: search.photo_url,
+          nomineeSlug: search.nominee_slug,
+        }
+      : undefined;
+
+  return <AwardsExperience confirmation={confirmation} {...pageData} />;
 }

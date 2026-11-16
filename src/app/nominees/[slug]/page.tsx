@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Header } from "@/components/header";
 import { NomineeMediaStage } from "@/components/nominee-media-stage";
 import { ProfileVoteActions } from "@/components/profile-vote-actions";
+import { VoteConfirmationCard } from "@/components/vote-confirmation-card";
 import { prisma } from "@/lib/prisma";
 import { verifyPaystackTransaction } from "@/lib/paystack";
 import { claimPaymentAndIncrementVotes } from "@/lib/vote-counts";
@@ -12,7 +13,15 @@ export const dynamic = "force-dynamic";
 
 type Props = {
   params: Promise<{ slug: string }>;
-  searchParams?: Promise<{ vote_status?: string; votes?: string; receipt?: string }>;
+  searchParams?: Promise<{
+    vote_status?: string;
+    votes?: string;
+    receipt?: string;
+    nominee_name?: string;
+    category_name?: string;
+    photo_url?: string;
+    nominee_slug?: string;
+  }>;
 };
 
 function safeSocialLinks(value: unknown): Array<[string, string]> {
@@ -112,17 +121,16 @@ export default async function NomineeProfilePage({ params, searchParams }: Props
           <span className="font-semibold text-slate-900 dark:text-white">{displayName}</span>
         </nav>
 
-        {/* Card Payment Confirmation Banner */}
+        {/* Card Payment Confirmation - Full Celebratory Card */}
         {search?.vote_status === "success" && (
-          <div className="mb-6 flex items-center gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-emerald-950 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-200">
-            <CheckCircle2 className="size-6 shrink-0 text-emerald-600 dark:text-emerald-400" />
-            <div>
-              <p className="font-bold">Card Payment Successful!</p>
-              <p className="text-xs text-emerald-800 dark:text-emerald-300">
-                {search.votes ? `${search.votes} votes were` : "Your votes were"} credited to {displayName}. Receipt: {search.receipt || "Confirmed"}
-              </p>
-            </div>
-          </div>
+          <VoteConfirmationCard
+            votes={search.votes || 25}
+            nomineeName={displayName}
+            categoryName={nominee.category.name}
+            photoUrl={nominee.photoUrl}
+            receipt={search.receipt}
+            nomineeSlug={nominee.slug}
+          />
         )}
 
         {/* Profile Showcase Card */}

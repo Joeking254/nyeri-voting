@@ -18,9 +18,18 @@ import { Countdown } from "@/components/countdown";
 import { Header } from "@/components/header";
 import { NomineeCard } from "@/components/nominee-card";
 import type { NomineeCardData } from "@/components/nominee-card";
+import { VoteConfirmationCard } from "@/components/vote-confirmation-card";
 import { VotingModal } from "@/components/voting-modal";
 
 type AwardsExperienceProps = {
+  confirmation?: {
+    votes?: string;
+    receipt?: string;
+    nomineeName?: string;
+    categoryName?: string;
+    photoUrl?: string;
+    nomineeSlug?: string;
+  };
   nominees: NomineeCardData[];
   categories: Array<{ id: string; name: string; description: string | null; imageUrl: string | null }>;
   announcements: Array<{ id: string; title: string; message: string; kind: string }>;
@@ -36,6 +45,7 @@ type AwardsExperienceProps = {
 };
 
 export function AwardsExperience({
+  confirmation,
   nominees,
   categories: categoryData,
   announcements,
@@ -113,7 +123,20 @@ export function AwardsExperience({
         <div className="pointer-events-none absolute -top-40 left-1/2 z-0 size-[500px] -translate-x-1/2 rounded-full bg-amber-500/15 blur-[120px]" />
         <div className="pointer-events-none absolute right-0 top-1/3 z-0 size-80 rounded-full bg-sky-500/15 blur-[100px]" />
 
-        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 sm:py-20 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
+        <div className="relative z-10 mx-auto max-w-7xl px-4 pt-8 sm:px-6 lg:px-8">
+          {confirmation && (
+            <VoteConfirmationCard
+              votes={confirmation.votes || 25}
+              nomineeName={confirmation.nomineeName || "Nominee"}
+              categoryName={confirmation.categoryName}
+              photoUrl={confirmation.photoUrl}
+              receipt={confirmation.receipt}
+              nomineeSlug={confirmation.nomineeSlug}
+            />
+          )}
+        </div>
+
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-10 px-4 py-8 sm:px-6 sm:py-16 lg:grid-cols-[1fr_auto] lg:items-center lg:px-8">
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-300">
@@ -173,7 +196,7 @@ export function AwardsExperience({
 
             <div className="mt-5 flex items-center gap-2 text-xs text-slate-400">
               <ShieldCheck className="size-4 text-emerald-400" />
-              <span>KES {votePrice} per vote · Instant STK Push confirmation via M-Pesa & PayHero</span>
+              <span>KES {votePrice} per vote · Instant confirmation via M-Pesa & Card</span>
             </div>
           </div>
 
@@ -583,10 +606,6 @@ export function AwardsExperience({
               <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                 Celebrating and empowering the digital content creators, storytellers, and cultural architects of Nyeri County.
               </p>
-              <div className="mt-4 flex items-center gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-400">
-                <ShieldCheck className="size-4" />
-                <span>Verified M-Pesa & PayHero Payments</span>
-              </div>
             </div>
 
             {/* Col 2 */}
@@ -631,7 +650,10 @@ export function AwardsExperience({
 
           <div className="mt-10 flex flex-col items-center justify-between gap-4 border-t border-slate-200/80 pt-6 text-xs text-slate-500 sm:flex-row dark:border-slate-800 dark:text-slate-400">
             <p>© 2026 Nyeri Content Creators of the Year. All rights reserved.</p>
-            <p>1 Vote = KES {votePrice}. Secured with M-Pesa STK Push.</p>
+            <p className="flex items-center gap-1 font-medium">
+              <span>Designed & Developed by</span>
+              <span className="font-bold text-slate-800 dark:text-white">JKdesign</span>
+            </p>
           </div>
         </div>
       </footer>
