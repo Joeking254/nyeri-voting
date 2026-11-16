@@ -85,10 +85,20 @@ export async function POST(request: Request) {
   );
 
   if (hasPayheroFields) {
-    const payheroData: PayHeroCallbackBody = payload.response || payload;
+    const payheroData: any = payload.response || payload;
+    const rawStatus = (
+      typeof payheroData.Status === "string"
+        ? payheroData.Status
+        : typeof payheroData.status === "string"
+          ? payheroData.status
+          : ""
+    ).toUpperCase();
     const isSuccess =
-      (payheroData.Status || payheroData.status || "").toUpperCase() === "SUCCESS" ||
-      payheroData.ResultCode === 0;
+      rawStatus === "SUCCESS" ||
+      payheroData.status === true ||
+      payheroData.success === true ||
+      payheroData.ResultCode === 0 ||
+      payheroData.result_code === 0;
     const externalRef = payheroData.ExternalReference || payheroData.external_reference;
     const checkoutReqId = payheroData.CheckoutRequestID || payheroData.checkout_request_id;
 
@@ -137,9 +147,12 @@ export async function POST(request: Request) {
     }
 
     const receipt =
-      payheroData.MpesaReceiptNumber ||
-      payheroData.mpesa_receipt_number ||
-      payheroData.payment_reference ||
+      (typeof payheroData.third_party_reference === "string" && payheroData.third_party_reference.trim()) ||
+      (typeof payheroData.provider_reference === "string" && payheroData.provider_reference.trim()) ||
+      (typeof payheroData.MpesaReceiptNumber === "string" && payheroData.MpesaReceiptNumber.trim()) ||
+      (typeof payheroData.mpesa_receipt_number === "string" && payheroData.mpesa_receipt_number.trim()) ||
+      (typeof payheroData.payment_reference === "string" && payheroData.payment_reference.trim()) ||
+      (typeof payheroData.reference === "string" && payheroData.reference.trim()) ||
       `PH-${Date.now()}-${transaction.id.slice(0, 6)}`;
 
     try {

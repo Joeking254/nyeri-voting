@@ -50,7 +50,11 @@ export function getPayHeroChannelId(): number {
 export function getPayHeroCallbackUrl(): string {
   let rawUrl = (process.env.PAYHERO_CALLBACK_URL || "").trim();
   if (!rawUrl) {
-    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://13.62.100.156").replace(/\/$/, "");
+    const appUrl = (
+      process.env.NEXT_PUBLIC_APP_URL ||
+      process.env.APP_URL ||
+      "https://vote.nexusisp.in"
+    ).replace(/\/$/, "");
     rawUrl = `${appUrl}/api/payhero/callback`;
   }
   // Auto-correct stale EC2 public IP if present
@@ -58,23 +62,23 @@ export function getPayHeroCallbackUrl(): string {
 
   const callbackUrl = new URL(rawUrl);
   const token =
-    process.env.PAYHERO_CALLBACK_TOKEN ||
-    process.env.MPESA_CALLBACK_TOKEN ||
-    "payhero-secret-token";
+    (process.env.PAYHERO_CALLBACK_TOKEN || process.env.MPESA_CALLBACK_TOKEN || "payhero-secret-token").trim();
 
-  // Note: Allow HTTP or HTTPS callbacks so testing and direct-IP production both work seamlessly
   callbackUrl.searchParams.set("token", token);
   return callbackUrl.toString();
 }
 
 export function isAuthorizedPayHeroCallback(request: Request): boolean {
-  const expectedToken =
-    process.env.PAYHERO_CALLBACK_TOKEN || process.env.MPESA_CALLBACK_TOKEN;
+  const expectedToken = (
+    process.env.PAYHERO_CALLBACK_TOKEN || process.env.MPESA_CALLBACK_TOKEN || ""
+  ).trim();
   const url = new URL(request.url);
-  const providedToken =
+  const providedToken = (
     url.searchParams.get("token") ||
     request.headers.get("x-callback-token") ||
-    request.headers.get("x-payhero-token");
+    request.headers.get("x-payhero-token") ||
+    ""
+  ).trim();
 
   // If no token was configured, allow callback
   if (!expectedToken) {
@@ -219,48 +223,79 @@ export async function checkPayHeroTransactionStatus(
       signal: AbortSignal.timeout(8_000),
     });
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      console.warn(`PayHero transaction-status HTTP ${response.status} for reference ${reference}`);
+      return null;
+    }
 
-    const data = (await response.json()) as {
-      success?: boolean;
-      status?: string;
-      payment_reference?: string;
-      reference?: string;
-      third_party_reference?: string;
-      amount?: number;
-      phone_number?: string;
-      phone?: string;
-    };
+    const rawData = await response.json();
+    const data: Record<string, any> =
+      rawData && typeof rawData.response === "object" && rawData.response !== null
+        ? { ...rawData, ...rawData.response }
+        : rawData || {};
 
-    const statusUpper = (data.status || "").toUpperCase();
+    const statusUpper = (
+      typeof data.status === "string"
+        ? data.status
+        : typeof data.Status === "string"
+          ? data.Status
+          : ""
+    ).toUpperCase();
 
-    if (statusUpper === "SUCCESS") {
+    const isSuccess =
+      statusUpper === "SUCCESS" ||
+      data.success === true ||
+      data.status === true ||
+      data.ResultCode === 0 ||
+      data.result_code === 0;
+
+    const isFailed =
+      statusUpper === "FAILED" ||
+      statusUpper === "CANCELLED" ||
+      statusUpper === "REJECTED" ||
+      (data.success === false && statusUpper !== "PENDING" && statusUpper !== "QUEUED");
+
+    const isPending =
+      statusUpper === "QUEUED" ||
+      statusUpper === "PENDING" ||
+      statusUpper === "PROCESSING";
+
+    if (isSuccess) {
+      const receipt =
+        (typeof data.third_party_reference === "string" && data.third_party_reference.trim()) ||
+        (typeof data.provider_reference === "string" && data.provider_reference.trim()) ||
+        (typeof data.MpesaReceiptNumber === "string" && data.MpesaReceiptNumber.trim()) ||
+        (typeof data.mpesa_receipt_number === "string" && data.mpesa_receipt_number.trim()) ||
+        (typeof data.payment_reference === "string" && data.payment_reference.trim()) ||
+        (typeof data.reference === "string" && data.reference.trim()) ||
+        reference;
+
       return {
         status: "SUCCESS",
-        receiptNumber: data.payment_reference || null,
-        rawStatus: data.status,
-        amount: data.amount,
-        phoneNumber: data.phone_number || data.phone,
+        receiptNumber: receipt,
+        rawStatus: typeof data.status === "string" ? data.status : data.Status || "SUCCESS",
+        amount: typeof data.amount === "number" ? data.amount : typeof data.Amount === "number" ? data.Amount : undefined,
+        phoneNumber: data.phone_number || data.phone || data.Phone || data.PhoneNumber,
       };
     }
 
-    if (statusUpper === "FAILED" || statusUpper === "CANCELLED") {
+    if (isFailed) {
       return {
         status: "FAILED",
-        rawStatus: data.status,
+        rawStatus: typeof data.status === "string" ? data.status : data.Status || "FAILED",
       };
     }
 
-    if (statusUpper === "QUEUED" || statusUpper === "PENDING") {
+    if (isPending) {
       return {
         status: "PENDING",
-        rawStatus: data.status,
+        rawStatus: typeof data.status === "string" ? data.status : data.Status || "PENDING",
       };
     }
 
     return {
       status: "UNKNOWN",
-      rawStatus: data.status,
+      rawStatus: typeof data.status === "string" ? data.status : data.Status,
     };
   } catch (error) {
     console.warn("PayHero transaction-status query error:", error);

@@ -31,15 +31,35 @@ export async function GET(_request: Request, context: RouteContext) {
   // If transaction is still pending and PayHero is configured, query PayHero transaction status directly
   if (transaction.status === "PENDING" && isPayHeroConfigured()) {
     try {
-      // Query by internal UUID or checkoutRequestId / merchantRequestId
-      const payheroStatus =
-        (await checkPayHeroTransactionStatus(transaction.id)) ||
-        (transaction.merchantRequestId
-          ? await checkPayHeroTransactionStatus(transaction.merchantRequestId)
-          : null);
+      const candidates = [
+        transaction.merchantRequestId,
+        transaction.transactionId,
+        transaction.id,
+      ].filter((ref): ref is string => Boolean(ref && typeof ref === "string" && ref.trim()));
 
-      if (payheroStatus?.status === "SUCCESS" && payheroStatus.receiptNumber) {
-        const receipt = payheroStatus.receiptNumber;
+      const uniqueCandidates = Array.from(new Set(candidates));
+
+      let payheroStatus = null;
+      for (const ref of uniqueCandidates) {
+        const result = await checkPayHeroTransactionStatus(ref);
+        if (result) {
+          if (result.status === "SUCCESS" || result.status === "FAILED") {
+            payheroStatus = result;
+            break;
+          }
+          if (result.status === "PENDING" && !payheroStatus) {
+            payheroStatus = result;
+          }
+        }
+      }
+
+      if (payheroStatus?.status === "SUCCESS") {
+        const receipt =
+          payheroStatus.receiptNumber ||
+          transaction.transactionId ||
+          transaction.merchantRequestId ||
+          `PH-${Date.now()}`;
+
         let claimed = false;
         await prisma.$transaction(async (database) => {
           claimed = await claimPaymentAndIncrementVotes(database, {

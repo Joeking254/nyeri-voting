@@ -18,18 +18,12 @@ export async function claimPaymentAndIncrementVotes(
     status: "PENDING",
   };
 
-  if (payment.checkoutRequestId) {
-    whereClause.OR = [
-      { transactionId: payment.checkoutRequestId },
-      { transactionId: null },
-    ];
-  }
-
   const claimed = await database.voteTransaction.updateMany({
     where: whereClause,
     data: {
       status: "SUCCESS",
       mpesaReceiptNumber: payment.receiptNumber,
+      ...(payment.checkoutRequestId ? { transactionId: payment.checkoutRequestId } : {}),
     },
   });
   if (claimed.count !== 1) return false;
